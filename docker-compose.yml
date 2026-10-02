@@ -1,0 +1,34 @@
+# Production deployment for Synology Container Manager (Project > Create).
+# Values come from a .env file next to this file; see .env.example.
+services:
+  charon:
+    build: .
+    image: charon:latest
+    container_name: charon
+    restart: unless-stopped
+    # Match the Synology user that owns your download and media shares (`id <user>` over SSH).
+    user: "${PUID:-1026}:${PGID:-100}"
+    ports:
+      # Bind to your NAS LAN IP (or Tailscale IP) so Charon is not exposed elsewhere.
+      - "${CHARON_BIND_IP:-0.0.0.0}:${CHARON_HOST_PORT:-8080}:8080"
+    environment:
+      CHARON_ADMIN_API_KEY: ${CHARON_ADMIN_API_KEY:-}
+      CHARON_DS_URL: ${CHARON_DS_URL:?set CHARON_DS_URL, e.g. http://192.168.1.10:5000}
+      CHARON_DS_USERNAME: ${CHARON_DS_USERNAME:?set CHARON_DS_USERNAME}
+      CHARON_DS_PASSWORD: ${CHARON_DS_PASSWORD:?set CHARON_DS_PASSWORD}
+      CHARON_DS_DESTINATION: ${CHARON_DS_DESTINATION:-downloads}
+      CHARON_DS_VERIFY_TLS: ${CHARON_DS_VERIFY_TLS:-true}
+      CHARON_POLL_INTERVAL_SECONDS: ${CHARON_POLL_INTERVAL_SECONDS:-10}
+      CHARON_LOG_LEVEL: ${CHARON_LOG_LEVEL:-INFO}
+      CHARON_CORS_ORIGINS: ${CHARON_CORS_ORIGINS:-}
+      # Container directories rules may move files into (comma-separated).
+      CHARON_RULE_ROOTS: ${CHARON_RULE_ROOTS:-/media}
+      # To serve a built UI at /, mount it and set: CHARON_UI_DIR: /ui
+    volumes:
+      # Charon's database.
+      - ${CHARON_DATA_DIR:-/volume1/docker/charon/data}:/data
+      # Must be the same folder Download Station writes to (CHARON_DS_DESTINATION).
+      - ${CHARON_DOWNLOADS_DIR:-/volume1/downloads}:/downloads
+      # Every folder a rule moves files into must be mounted and listed in
+      # CHARON_RULE_ROOTS. Rule destinations use the container-side path, e.g. /media/tv.
+      - ${CHARON_MEDIA_DIR:-/volume1/media}:/media

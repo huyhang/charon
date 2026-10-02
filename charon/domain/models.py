@@ -1,0 +1,162 @@
+"""Core domain models. Pure data with validation, no I/O."""
+
+from datetime import datetime
+from enum import StrEnum
+from pathlib import PurePosixPath
+
+import regex
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from charon.domain.destinations import normalize
+
+
+class JobStatus(StrEnum):
+    QUEUED = "queued"
+    DOWNLOADING = "downloading"
+    COMPLETED = "completed"
+    PROCESSING = "processing"
+    DONE = "done"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+ACTIVE_STATUSES = frozenset({JobStatus.QUEUED, JobStatus.DOWNLOADING})
+CANCELLABLE_STATUSES = ACTIVE_STATUSES | {JobStatus.COMPLETED}
+
+
+class ErrorStage(StrEnum):
+    DOWNLOAD = "download"
+    PROCESSING = "processing"
+
+
+class JobError(BaseModel):
+    stage: ErrorStage
+    code: str
+    message: str
+
+
+class Progress(BaseModel):
+    percent: float = 0.0
+    size_bytes: int | None = None
+    downloaded_bytes: int = 0
+    download_speed_bps: int | None = None
+    eta_seconds: int | None = None
+
+
+class Job(BaseModel):
+    id: str
+    magnet: str
+    status: JobStatus = JobStatus.QUEUED
+    backend_task_id: str | None = None
+    name: str | None = None
+    progress: Progress = Field(default_factory=Progress)
+    forced_rule_id: str | None = None
+    rule_id: str | None = None
+    final_path: str | None = None
+    error: JobError | None = None
+    created_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None = None
+
+
+class MatchType(StrEnum):
+    GLOB = "glob"
+    REGEX = "regex"
+
+
+class RenameOp(StrEnum):
+    REPLACE = "replace"
+    REGEX_REPLACE = "regex_replace"
+
+
+class RenameStep(BaseModel):
+    op: RenameOp
+    find: str = Field(min_length=1)
+    replace: str = ""
+
+    @model_validator(mode="after")
+    def _check_regex(self) -> "RenameStep":
+        if self.op is RenameOp.REGEX_REPLACE:
+            _check_template(_compile(self.find), self.replace)
+        return self
+
+
+class RuleSpec(BaseModel):
+    """A rule as supplied by a client, before it has an identity."""
+
+    name: str = Field(min_length=1)
+    priority: int = 100
+    enabled: bool = True
+    match_type: MatchType = MatchType.GLOB
+    pattern: str = Field(min_length=1)
+    steps: list[RenameStep] = Field(default_factory=list)
+    destination: str
+
+    @field_validator("destination")
+    @classmethod
+    def _check_destination(cls, value: str) -> str:
+        if not PurePosixPath(value).is_absolute():
+            raise ValueError("destination must be an absolute path")
+        return str(normalize(value))
+
+    @model_validator(mode="after")
+    def _check_pattern(self) -> "RuleSpec":
+        if self.match_type is MatchType.REGEX:
+            _compile(self.pattern)
+        return self
+
+
+class Rule(RuleSpec):
+    id: str
+    # Breaks priority ties: the older rule wins.
+    created_at: datetime
+
+
+# Rules use the `regex` module (a superset of `re`) because it can time out a runaway match.
+def _compile(pattern: str) -> regex.Pattern[str]:
+    try:
+        return regex.compile(pattern)
+    except regex.error as exc:
+        raise ValueError(f"invalid regex {pattern!r}: {exc}") from exc
+
+
+def _check_template(pattern: regex.Pattern[str], template: str) -> None:
+    # `regex` only parses a replacement once something matches, so expand it against an
+    # empty partial match. No partial match means the pattern can never match, so its
+    # replacement can never run.
+    match = pattern.search("", partial=True)
+    if match is None:
+        return
+    try:
+        match.expand(template)
+    except (regex.error, IndexError) as exc:
+        raise ValueError(f"invalid replacement {template!r}: {exc}") from exc
+
+
+class Role(StrEnum):
+    ADMIN = "admin"
+    CLIENT = "client"
+
+
+class ApiKey(BaseModel):
+    """A stored API key. Only the hash of the secret is kept."""
+
+    id: str
+    name: str
+    role: Role
+    prefix: str
+    key_hash: str
+    created_at: datetime
+    revoked_at: datetime | None = None
+
+    @property
+    def revoked(self) -> bool:
+        return self.revoked_at is not None
+
+
+class Principal(BaseModel):
+    """The caller a request was authenticated as."""
+
+    name: str
+    role: Role
+    key_id: str | None = None

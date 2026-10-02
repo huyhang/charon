@@ -1,0 +1,36 @@
+# Local stack: Charon + fake Download Station sharing ./var folders.
+#   make docker-dev    then    make docker-e2e
+services:
+  fake-ds:
+    build:
+      context: .
+      dockerfile: Dockerfile.fake
+    user: "${PUID:-1000}:${PGID:-1000}"
+    ports:
+      - "5000:5000"
+    environment:
+      FAKE_DS_DOWNLOAD_DIR: /downloads
+      FAKE_DS_DURATION_SECONDS: "5"
+      FAKE_DS_USERNAME: admin
+      FAKE_DS_PASSWORD: admin
+    volumes:
+      - ./var/downloads:/downloads
+
+  charon:
+    build: .
+    user: "${PUID:-1000}:${PGID:-1000}"
+    depends_on:
+      - fake-ds
+    ports:
+      - "8080:8080"
+    environment:
+      CHARON_ADMIN_API_KEY: dev-key
+      CHARON_DS_URL: http://fake-ds:5000
+      CHARON_DS_USERNAME: admin
+      CHARON_DS_PASSWORD: admin
+      CHARON_POLL_INTERVAL_SECONDS: "1"
+      CHARON_RULE_ROOTS: /library
+    volumes:
+      - ./var/data:/data
+      - ./var/downloads:/downloads
+      - ./var/library:/library
