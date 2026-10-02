@@ -1,7 +1,7 @@
 """End-to-end fixtures.
 
 If CHARON_E2E_URL is set, tests run against already-running services (e.g. `make dev`
-or docker-compose.dev.yml). Otherwise Charon and the fake Download Station are started
+or docker/docker-compose.dev.yml). Otherwise Charon and the fake Download Station are started
 in-process on free ports with temporary directories.
 """
 

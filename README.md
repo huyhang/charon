@@ -148,8 +148,8 @@ verification with a real download, access restrictions, updates, backups and
 troubleshooting.
 
 In short: create a DSM user with Download Station access, copy the repo to the NAS,
-`cp .env.example .env` and fill it in, then create a Container Manager project from
-`docker-compose.yml` (or run `sudo docker compose up -d --build`).
+`cp docker/.env.example docker/.env` and fill it in, then create a Container Manager project
+from the `docker/` folder (or run `sudo docker compose up -d --build` inside it).
 
 ## Testing against a fake Download Station
 
@@ -175,7 +175,7 @@ Three ways to stand it up:
 
 - `make e2e`: everything in-process, temporary folders. Best for CI.
 - `make dev` + `make dev-e2e` / `make smoke`: two local processes, files under `./var`.
-- `make docker-dev` + `make docker-e2e`: both containers via `docker-compose.dev.yml`.
+- `make docker-dev` + `make docker-e2e`: both containers via `docker/docker-compose.dev.yml`.
 
 ## Architecture
 
@@ -188,6 +188,7 @@ charon/
   api/        FastAPI routers, schemas, auth, error mapping
   bootstrap.py  composition root: the only module that knows concrete adapters
 fake_ds/      fake Download Station
+docker/       Dockerfiles, compose files (NAS and local fake stack), .env.example
 tests/unit    fast, isolated tests using in-memory fakes (tests/unit/fakes.py)
 tests/e2e     scripted API flows against Charon + fake Download Station
 ```
@@ -207,7 +208,7 @@ watcher and API calls (e.g. cancel) cannot overwrite each other.
 
 ## Configuration
 
-All settings are `CHARON_*` environment variables (see `charon/config.py` and `.env.example`).
+All settings are `CHARON_*` environment variables (see `charon/config.py` and `docker/.env.example`).
 
 ## Known limitations
 

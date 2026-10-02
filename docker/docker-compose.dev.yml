@@ -1,10 +1,11 @@
-# Local stack: Charon + fake Download Station sharing ./var folders.
+# Local stack: Charon + fake Download Station sharing the repository's var/ folders.
 #   make docker-dev    then    make docker-e2e
+# Paths are relative to this folder: images build from the repository root.
 services:
   fake-ds:
     build:
-      context: .
-      dockerfile: Dockerfile.fake
+      context: ..
+      dockerfile: docker/Dockerfile.fake
     user: "${PUID:-1000}:${PGID:-1000}"
     ports:
       - "5000:5000"
@@ -14,10 +15,12 @@ services:
       FAKE_DS_USERNAME: admin
       FAKE_DS_PASSWORD: admin
     volumes:
-      - ./var/downloads:/downloads
+      - ../var/downloads:/downloads
 
   charon:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     user: "${PUID:-1000}:${PGID:-1000}"
     depends_on:
       - fake-ds
@@ -31,6 +34,6 @@ services:
       CHARON_POLL_INTERVAL_SECONDS: "1"
       CHARON_RULE_ROOTS: /library
     volumes:
-      - ./var/data:/data
-      - ./var/downloads:/downloads
-      - ./var/library:/library
+      - ../var/data:/data
+      - ../var/downloads:/downloads
+      - ../var/library:/library

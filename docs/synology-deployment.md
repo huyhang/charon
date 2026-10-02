@@ -101,8 +101,10 @@ or Charon won't find them.
 
 ## 5. Copy Charon to the NAS
 
-Put the repository's contents into `docker/charon/app`, so that `Dockerfile` and
-`docker-compose.yml` sit directly inside `app/`. Choose either option.
+Put the repository's contents into `docker/charon/app`, so that the repository's own
+`docker/` folder (Dockerfiles, `docker-compose.yml`, `.env.example`) ends up at
+`docker/charon/app/docker`. The first `docker` is the shared folder Container Manager created;
+the last is the repository's. Choose either option.
 
 **Option A: File Station (no tools needed)**
 
@@ -124,7 +126,7 @@ git clone <your-repo-url> app
 In your SSH session:
 
 ```bash
-cd /volume1/docker/charon/app
+cd /volume1/docker/charon/app/docker
 cp .env.example .env
 openssl rand -base64 32          # copy the output; it becomes your admin API key
 vi .env                          # or edit .env with File Station's Text Editor
@@ -161,7 +163,7 @@ keys can't change it. Charon's database directory (`/data`) is always off-limits
 
 To let rules use another shared folder:
 
-1. Mount it under `volumes:` in `docker-compose.yml`, e.g. `- /volume1/video:/video`.
+1. Mount it under `volumes:` in `docker/docker-compose.yml`, e.g. `- /volume1/video:/video`.
 2. Add it to the roots in `.env`, e.g. `CHARON_RULE_ROOTS=/media,/video`.
 3. Recreate the container.
 
@@ -176,7 +178,7 @@ Choose either option.
 
 1. Open **Container Manager → Project → Create**.
 2. **Project name:** `charon`.
-3. **Path:** select `docker/charon/app`.
+3. **Path:** select `docker/charon/app/docker`.
 4. **Source:** *Use existing docker-compose.yml*.
 5. Click **Next**, skip **Web portal settings**, then **Next → Done**. Leave *Start the
    project once it is created* ticked.
@@ -187,7 +189,7 @@ shows **Running**, continue.
 **Option B: SSH**
 
 ```bash
-cd /volume1/docker/charon/app
+cd /volume1/docker/charon/app/docker
 sudo docker compose up -d --build     # on older DSM: sudo docker-compose up -d --build
 ```
 
@@ -278,9 +280,10 @@ If any of these fail, the job's `error` field and the container log (step 11) sa
 **Updating Charon:**
 
 1. Replace the contents of `docker/charon/app` with the new version (Option A or B from
-   step 5). Keep your `.env`, and any `volumes:` lines you added to `docker-compose.yml`.
+   step 5). Keep your `docker/.env`, and any `volumes:` lines you added to
+   `docker/docker-compose.yml`.
 2. Rebuild: **Container Manager → Project → charon → Action → Build**, or over SSH run
-   `sudo docker compose up -d --build`.
+   `sudo docker compose up -d --build` in `/volume1/docker/charon/app/docker`.
 
 Jobs, rules and API keys live in `docker/charon/data`, so they survive updates.
 
@@ -314,14 +317,14 @@ that:
    and `/volume1/data/media`. Separate shared folders are separate Btrfs subvolumes, so
    moves between them are always copies.
 2. Mount that shared folder once, at the same path inside the container. In
-   `docker-compose.yml`, replace the `/downloads` and `/media` volume lines with:
+   `docker/docker-compose.yml`, replace the `/downloads` and `/media` volume lines with:
 
    ```yaml
          - /volume1/data:/volume1/data
    ```
 
 3. In `.env`, set `CHARON_DS_DESTINATION=data/downloads`. Then add this under
-   `environment:` in `docker-compose.yml`:
+   `environment:` in `docker/docker-compose.yml`:
 
    ```yaml
          CHARON_DOWNLOAD_DIR: /volume1/data/downloads

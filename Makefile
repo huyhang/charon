@@ -38,12 +38,12 @@ openapi:  ## Regenerate docs/openapi.json after changing the API
 	$(PYTHON) -m charon.openapi docs/openapi.json
 
 docker-build:  ## Build the Charon and fake Download Station images
-	docker build -t charon:latest .
-	docker build -f Dockerfile.fake -t charon-fake-ds:latest .
+	docker build -f docker/Dockerfile -t charon:latest .
+	docker build -f docker/Dockerfile.fake -t charon-fake-ds:latest .
 
 docker-dev:  ## Run the dev stack in Docker
 	mkdir -p var/data var/downloads var/library
-	docker compose -f docker-compose.dev.yml up --build
+	docker compose -p charon -f docker/docker-compose.dev.yml up --build
 
 docker-e2e:  ## End-to-end tests against `make docker-dev`
 	E2E_LIBRARY_DIR=var/library E2E_LIBRARY_DIR_SERVICE=/library \

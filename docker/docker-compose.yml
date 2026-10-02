@@ -1,8 +1,11 @@
 # Production deployment for Synology Container Manager (Project > Create).
 # Values come from a .env file next to this file; see .env.example.
+# Paths are relative to this folder: the image builds from the repository root.
 services:
   charon:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     image: charon:latest
     container_name: charon
     restart: unless-stopped
