@@ -1,9 +1,9 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import PurePosixPath
 
 from charon.domain.destinations import DestinationPolicy
 from charon.domain.models import Rule, RuleSpec
-from charon.domain.rename import RegexTimeoutError, select_rule, target_path
+from charon.domain.rename import RegexTimeoutError, matches, select_rule, target_path
 from charon.errors import InvalidInputError, NotFoundError
 from charon.ports.clock import Clock, IdFactory, new_uuid, utc_now
 from charon.ports.stores import RuleStore
@@ -74,12 +74,29 @@ class RuleService:
             raise InvalidInputError("unsafe_name", str(exc)) from exc
 
     def preview(self, name: str, rule_id: str | None = None) -> Preview:
-        rule = self.select_for(name, rule_id)
+        return self._preview(self.select_for(name, rule_id), name)
+
+    def preview_draft(self, name: str, spec: RuleSpec) -> Preview:
+        """Preview an unsaved rule as if it were the only one, e.g. while editing it.
+
+        It applies only if its pattern matches. `rule` stays None since it isn't saved.
+        """
+        draft = Rule(id="draft", created_at=self._clock(), **spec.model_dump())
+        preview = self._preview(draft if self._matches(draft, name) else None, name)
+        return replace(preview, rule=None)
+
+    def _preview(self, rule: Rule | None, name: str) -> Preview:
         if rule is None:
             return Preview(rule=None, new_name=name, final_path=None)
         self._check_destination(rule.destination)
         path = self.target_for(rule, name)
         return Preview(rule=rule, new_name=path.name, final_path=str(path))
+
+    def _matches(self, rule: Rule, name: str) -> bool:
+        try:
+            return matches(rule, name)
+        except RegexTimeoutError as exc:
+            raise InvalidInputError("rule_timeout", str(exc)) from exc
 
     def _check_destination(self, destination: str) -> None:
         problem = self._policy.violation(destination)

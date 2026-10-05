@@ -93,6 +93,38 @@ def test_list_filters_by_status() -> None:
     assert [j.id for j in h.service.list([JobStatus.DONE]).items] == ["a"]
 
 
+def _downloading(job_id: str, speed: int | None):
+    return make_job(id=job_id, status=JobStatus.DOWNLOADING, progress={"download_speed_bps": speed})
+
+
+@pytest.mark.parametrize(
+    ("jobs", "counts", "speed"),
+    [
+        ([], {}, 0),
+        (
+            [make_job(id="a", status=JobStatus.DONE), make_job(id="b", status=JobStatus.DONE)],
+            {JobStatus.DONE: 2},
+            0,
+        ),
+        (
+            [_downloading("a", 1000), _downloading("b", None), _downloading("c", 500)],
+            {JobStatus.DOWNLOADING: 3},
+            1500,
+        ),
+        (
+            [make_job(id="a", status=JobStatus.FAILED), _downloading("b", 42), make_job(id="c")],
+            {JobStatus.FAILED: 1, JobStatus.DOWNLOADING: 1, JobStatus.QUEUED: 1},
+            42,
+        ),
+    ],
+    ids=["empty", "done-only", "speeds-summed-null-as-zero", "mixed"],
+)
+def test_summary_counts_every_status_and_sums_speed(jobs, counts, speed) -> None:
+    summary = Harness(*jobs).service.summary()
+    assert summary.counts == {status: counts.get(status, 0) for status in JobStatus}
+    assert summary.download_speed_bps == speed
+
+
 def test_cursor_round_trip() -> None:
     job = make_job()
     assert decode_cursor(encode_cursor(job)) == (job.created_at, job.id)

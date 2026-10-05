@@ -5,7 +5,7 @@ from enum import StrEnum
 from pathlib import PurePosixPath
 
 import regex
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 from charon.domain.destinations import normalize
 
@@ -74,11 +74,22 @@ class RenameStep(BaseModel):
     find: str = Field(min_length=1)
     replace: str = ""
 
-    @model_validator(mode="after")
-    def _check_regex(self) -> "RenameStep":
-        if self.op is RenameOp.REGEX_REPLACE:
-            _check_template(_compile(self.find), self.replace)
-        return self
+    # Field validators (fields validate in declaration order, so earlier ones are in
+    # `info.data`) so that errors point at the offending field, e.g. steps.0.replace.
+    @field_validator("find")
+    @classmethod
+    def _check_find(cls, value: str, info: ValidationInfo) -> str:
+        if info.data.get("op") is RenameOp.REGEX_REPLACE:
+            _compile(value)
+        return value
+
+    @field_validator("replace")
+    @classmethod
+    def _check_replace(cls, value: str, info: ValidationInfo) -> str:
+        find = info.data.get("find")
+        if info.data.get("op") is RenameOp.REGEX_REPLACE and find is not None:
+            _check_template(_compile(find), value)
+        return value
 
 
 class RuleSpec(BaseModel):
@@ -99,11 +110,12 @@ class RuleSpec(BaseModel):
             raise ValueError("destination must be an absolute path")
         return str(normalize(value))
 
-    @model_validator(mode="after")
-    def _check_pattern(self) -> "RuleSpec":
-        if self.match_type is MatchType.REGEX:
-            _compile(self.pattern)
-        return self
+    @field_validator("pattern")
+    @classmethod
+    def _check_pattern(cls, value: str, info: ValidationInfo) -> str:
+        if info.data.get("match_type") is MatchType.REGEX:
+            _compile(value)
+        return value
 
 
 class Rule(RuleSpec):

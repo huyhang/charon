@@ -45,6 +45,21 @@ def _seed(store: SqliteJobStore) -> None:
 
 
 @pytest.mark.parametrize(
+    ("seeded", "expected"),
+    [
+        (False, {}),
+        (True, {JobStatus.QUEUED: 2, JobStatus.DONE: 1, JobStatus.FAILED: 1}),
+    ],
+    ids=["empty", "seeded"],
+)
+def test_job_count_by_status(db, seeded: bool, expected: dict) -> None:
+    store = SqliteJobStore(db)
+    if seeded:
+        _seed(store)
+    assert store.count_by_status() == expected
+
+
+@pytest.mark.parametrize(
     ("statuses", "limit", "after_index", "expected"),
     [
         (None, None, None, ["j3", "j2", "j1", "j0"]),

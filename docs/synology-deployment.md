@@ -213,6 +213,10 @@ curl -s -H "$ADMIN" $NAS/auth/me
 
 If `downloader` is `unreachable`, see [Troubleshooting](#troubleshooting).
 
+Then open `http://192.168.1.10:8080` in a browser and sign in with your admin key: the web
+UI covers everything below (keys, rules with a live test bench, downloads). On a phone, use
+**Add to Home Screen** to install it as an app. The curl commands stay useful for scripts.
+
 The interactive API docs are at `http://192.168.1.10:8080/api/v1/docs`. Click
 **Authorize**, paste your admin key, and you can try every endpoint from the browser.
 

@@ -5,3 +5,12 @@ tests
 **/__pycache__
 .pytest_cache
 **/.env
+ui/node_modules
+ui/dist
+ui/dev-dist
+ui/test-results
+ui/playwright-report
+ui/coverage
+htmlcov
+.coverage
+**/*.tsbuildinfo

@@ -3,10 +3,12 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from charon.domain.models import ApiKey, Job, JobError, JobStatus, Progress, Role
+from charon.domain.models import ApiKey, Job, JobError, JobStatus, Progress, Role, RuleSpec
 from charon.services.api_key_service import IssuedKey
+from charon.services.destination_service import FolderListing
+from charon.services.download_service import JobSummary
 from charon.services.rule_service import Preview
 
 
@@ -45,15 +47,31 @@ class JobListView(BaseModel):
     next_cursor: str | None
 
 
+class DownloadSummaryView(BaseModel):
+    counts: dict[JobStatus, int] = Field(description="Jobs per status; every status is present.")
+    download_speed_bps: int = Field(description="Combined speed of every downloading job.")
+
+    @classmethod
+    def from_summary(cls, summary: JobSummary) -> "DownloadSummaryView":
+        return cls(counts=summary.counts, download_speed_bps=summary.download_speed_bps)
+
+
 class PreviewRequest(BaseModel):
     name: str = Field(min_length=1)
-    rule_id: str | None = None
+    rule_id: str | None = Field(default=None, description="Force this saved rule.")
+    rule: RuleSpec | None = Field(default=None, description="Preview this unsaved rule instead.")
+
+    @model_validator(mode="after")
+    def _one_rule_source(self) -> "PreviewRequest":
+        if self.rule_id is not None and self.rule is not None:
+            raise ValueError("give rule_id or rule, not both")
+        return self
 
 
 class PreviewView(BaseModel):
-    rule_id: str | None
+    rule_id: str | None = Field(description="The saved rule that applied, if any.")
     new_name: str
-    final_path: str | None
+    final_path: str | None = Field(description="Null when no rule applies.")
 
     @classmethod
     def from_preview(cls, preview: Preview) -> "PreviewView":
@@ -64,6 +82,26 @@ class PreviewView(BaseModel):
 class HealthView(BaseModel):
     status: Literal["ok"] = "ok"
     downloader: Literal["reachable", "unreachable"]
+
+
+class DestinationRootsView(BaseModel):
+    roots: list[str]
+
+
+class FolderView(BaseModel):
+    name: str
+    path: str
+
+
+class FolderListingView(BaseModel):
+    path: str
+    parent: str | None = Field(description="Null when going up would leave the allowed roots.")
+    folders: list[FolderView]
+
+    @classmethod
+    def from_listing(cls, listing: FolderListing) -> "FolderListingView":
+        folders = [FolderView(name=f.name, path=f.path) for f in listing.folders]
+        return cls(path=listing.path, parent=listing.parent, folders=folders)
 
 
 class CreateApiKeyRequest(BaseModel):

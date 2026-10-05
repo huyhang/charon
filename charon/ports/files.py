@@ -20,3 +20,10 @@ class FileOps(Protocol):
     def resolve(self, path: PurePosixPath) -> PurePosixPath:
         """The real path with symlinks followed; missing components are kept as-is."""
         ...
+
+    def list_folders(self, path: PurePosixPath) -> list[str]:
+        """Sorted names of the directories directly inside `path`, symlinks followed.
+
+        Raises FileNotFoundError or NotADirectoryError if `path` is not a directory.
+        """
+        ...

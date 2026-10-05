@@ -27,6 +27,13 @@ class JobPage:
     next_cursor: str | None
 
 
+@dataclass(frozen=True)
+class JobSummary:
+    # Every status is present, with zero for statuses that have no jobs.
+    counts: dict[JobStatus, int]
+    download_speed_bps: int
+
+
 class DownloadService:
     def __init__(
         self,
@@ -75,6 +82,14 @@ class DownloadService:
         page = jobs[:limit]
         has_more = len(jobs) > limit
         return JobPage(items=page, next_cursor=encode_cursor(page[-1]) if has_more else None)
+
+    def summary(self) -> JobSummary:
+        """Totals across every job, not just one page of the list."""
+        stored = self._jobs.count_by_status()
+        counts = {status: stored.get(status, 0) for status in JobStatus}
+        downloading = self._jobs.list([JobStatus.DOWNLOADING])
+        speed = sum(job.progress.download_speed_bps or 0 for job in downloading)
+        return JobSummary(counts=counts, download_speed_bps=speed)
 
     def cancel(self, job_id: str) -> Job:
         job = self.get(job_id)

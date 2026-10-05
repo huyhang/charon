@@ -22,6 +22,9 @@ def create_rule(spec: RuleSpec, service: RuleService = Depends(get_rule_service)
 def preview_rule(
     body: PreviewRequest, service: RuleService = Depends(get_rule_service)
 ) -> PreviewView:
+    """Dry run: what `name` would become, under the saved rules or an unsaved draft `rule`."""
+    if body.rule is not None:
+        return PreviewView.from_preview(service.preview_draft(body.name, body.rule))
     return PreviewView.from_preview(service.preview(body.name, body.rule_id))
 
 

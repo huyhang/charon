@@ -1,6 +1,7 @@
 """In-memory implementations of every port, for fast isolated tests."""
 
 import itertools
+from collections import Counter
 from collections.abc import Collection
 from datetime import UTC, datetime, timedelta
 from pathlib import PurePosixPath
@@ -65,6 +66,9 @@ class InMemoryJobStore:
         if after is not None:
             jobs = [j for j in jobs if (j.created_at, j.id) < after]
         return jobs[:limit]
+
+    def count_by_status(self) -> dict[JobStatus, int]:
+        return dict(Counter(job.status for job in self.jobs.values()))
 
 
 class InMemoryRuleStore:
@@ -155,6 +159,8 @@ class FakeFileOps:
         # Errors raised by `exists` or `resolve`, keyed by method name.
         self.fail_on: dict[str, Exception] = {}
         self.symlinks: dict[PurePosixPath, PurePosixPath] = {}
+        # Folder names inside each directory, for `list_folders`.
+        self.folders: dict[PurePosixPath, list[str]] = {}
 
     def exists(self, path: PurePosixPath) -> bool:
         self._maybe_fail("exists")
@@ -174,6 +180,12 @@ class FakeFileOps:
             if path == link or link in path.parents:
                 return target / path.relative_to(link)
         return path
+
+    def list_folders(self, path: PurePosixPath) -> list[str]:
+        self._maybe_fail("list_folders")
+        if path not in self.folders:
+            raise FileNotFoundError(f"no such directory: {path}")
+        return sorted(self.folders[path])
 
     def _maybe_fail(self, method: str) -> None:
         if method in self.fail_on:

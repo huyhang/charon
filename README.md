@@ -17,6 +17,9 @@ make dev         # run Charon on :8080 against the fake Download Station on :500
 make smoke       # in another shell: curl walkthrough; fails unless the file is renamed and moved
 make dev-e2e     # in another shell: end-to-end suite against `make dev`
 make lint        # ruff lint + format check (`make fmt` fixes)
+make coverage    # backend and UI tests with coverage; fails below 90% (see Test coverage)
+make check       # everything a change must pass: lint, types, formatting, coverage
+make ui-dev      # the web UI against the fakes on http://localhost:5173; see Web UI below
 ```
 
 Ports are configurable: `make dev CHARON_PORT=18080 FAKE_DS_PORT=15000`, and pass the same
@@ -31,11 +34,14 @@ when `CHARON_ADMIN_API_KEY` is set (see [API keys](#api-keys)). Paths below omit
 |---|---|
 | `POST /downloads` `{magnet, rule_id?}` | Submit a magnet; `rule_id` forces a rule. Returns `202` + job |
 | `GET /downloads?status=&limit=&cursor=` | List jobs, newest first, cursor-paginated |
+| `GET /downloads/summary` | Jobs per status across all jobs, and the combined download speed |
 | `GET /downloads/{id}` | Job status and progress |
 | `DELETE /downloads/{id}` | Cancel a queued, downloading or completed job |
 | `POST /downloads/{id}/retry` | Retry a failed job (a failed download gets a fresh task) |
 | `GET/POST /rules`, `GET/PUT/DELETE /rules/{id}` | Manage rules |
-| `POST /rules/preview` `{name, rule_id?}` | Dry run: what a name would become |
+| `POST /rules/preview` `{name, rule_id? \| rule?}` | Dry run: what a name would become, under the saved rules or an unsaved draft `rule` |
+| `GET /destinations/roots` | The folders rule destinations must be inside |
+| `GET /destinations/folders?path=` | Folder names directly inside `path` (never files), for picking a destination |
 | `POST /api-keys` `{name, role?}` | Issue a key (admin only). The secret is returned once |
 | `GET /api-keys`, `GET /api-keys/{id}` | List / inspect keys (admin only; secrets never shown) |
 | `DELETE /api-keys/{id}` | Revoke a key immediately (admin only) |
@@ -119,26 +125,66 @@ Errors always look like `{"error": {"code": "...", "message": "..."}}`.
   rotate it, change `CHARON_ADMIN_API_KEY` and recreate the container. Consider keeping it
   for administration only and giving every client its own issued key.
 
-## Building a UI
+## Web UI
 
-The API is designed so a browser UI can be added without changing it:
+Charon ships with a web UI in `ui/` (React, TypeScript, Vite, Tailwind, shadcn/ui). The
+Docker image builds it and serves it at `/`, so on the NAS just open `http://nas:8080` and
+sign in with an API key. It installs as an app (PWA) from the browser menu.
 
-- **Typed client.** The OpenAPI spec is committed at `docs/openapi.json` with camelCase
-  operation ids (`submitDownload`, `listDownloads`, ...) and documented error responses.
-  Generate a TypeScript client from it, e.g. `npx openapi-typescript docs/openapi.json -o
-  src/api.ts`. A unit test fails if the API changes without `make openapi` being re-run,
-  so contract changes always show up in review. The live spec is at
-  `/api/v1/openapi.json`.
-- **Login.** Store a key in the browser and call `GET /api/v1/auth/me` to validate it; use
-  the returned `role` to show or hide key management.
-- **Errors.** Every failure, including unknown routes, is
-  `{"error": {"code", "message", "details?"}}`; `details` carries field-level validation
-  problems for forms.
-- **Serving.** Set `CHARON_UI_DIR` to a built single-page app (with `index.html`) and Charon
-  serves it at `/` from the same container: same origin, no CORS. Unknown non-API paths fall
-  back to `index.html`, so client-side routes survive a reload.
-- **Developing.** Run the UI dev server separately and allow it with
-  `CHARON_CORS_ORIGINS=http://localhost:5173` (comma-separated for several).
+- **Downloads:** paste a magnet link (into the bar or anywhere on the page) and see which
+  rule will match and what the file will be called before you submit. Live progress, filters,
+  a detail drawer with the job's timeline, and plain-language fixes for every failure.
+- **Rules:** drag to reorder priorities, toggle rules on and off, and edit them with a step
+  builder, a folder browser limited to `CHARON_RULE_ROOTS`, and a test bench that runs your
+  unsaved draft on the server as you type.
+- **API keys** (admins): issue a key and see it once, revoke with a confirmation.
+- ⌘K / Ctrl+K command palette, light and dark themes, phone layout.
+
+### Developing the UI against the fakes
+
+Needs Node 22.22.2+, 24.15+ or 26+ (the Docker build uses Node 24). No NAS or Docker required:
+
+```bash
+make ui-install
+make ui-dev          # fake Download Station + Charon + UI on http://localhost:5173 (key: dev-key)
+make ui-seed         # in another shell: sample rules, downloads in every state, and keys
+```
+
+`make ui-dev` slows fake downloads to 90 s (`FAKE_DS_DURATION_SECONDS`) so progress is
+visible, and accepts the same `CHARON_PORT` / `FAKE_DS_PORT` overrides as `make dev` (pass
+them to `make ui-seed` too). In dev builds a **Simulator** button steers the fake: finish or
+fail a task, expire sessions, reset. It is compiled out of production builds.
+
+| Command | Purpose |
+|---|---|
+| `make ui-test` | Unit and component tests (Vitest, Testing Library) |
+| `make ui-coverage` | The same with coverage; fails below 90% (HTML report in `ui/coverage/`) |
+| `make ui-lint` / `make ui-fmt` | Type check and Prettier check / format |
+| `make ui-e2e` | Browser tests against a running `make ui-dev` (first: `cd ui && npx playwright install chromium`) |
+| `make ui-build` | Production build into `ui/dist` |
+| `make ui-serve` | Build, then let Charon serve it on `:8080` against the fake, as on the NAS |
+| `make ui-api` | Regenerate `ui/src/api/schema.d.ts` from `docs/openapi.json` (`make openapi` does this too) |
+
+How it fits together:
+
+- **Typed client.** `ui/src/api/schema.d.ts` is generated from the committed OpenAPI spec, so
+  an API change that breaks the UI fails its type check.
+- **Inversion of control.** Components never call `fetch`: they get a `CharonClient`
+  interface from React context. The app injects the HTTP implementation; tests inject a fake
+  (`ui/src/test/fakeClient.ts`). Formatting, matching, diffing and error hints are pure
+  functions in `ui/src/lib`.
+- **Live data** is polled: every 1.5 s while anything is in flight, every 15 s otherwise,
+  paused in background tabs. The totals above the list come from `GET /downloads/summary`,
+  so they count every job, not just the loaded page.
+- **Sessions.** The key is re-checked every 30 s and when the tab regains focus, so a revoked
+  key signs the browser out on any page. If Charon can't be reached when the UI opens, it
+  says so and retries every few seconds instead of asking for a key.
+- **Copying** a key or hash works over plain HTTP too: browsers only offer the Clipboard API
+  on secure pages, so the UI falls back to copying a selection.
+- **Serving.** `CHARON_UI_DIR` points Charon at a built UI (the image sets it). Unknown
+  non-API paths fall back to `index.html`, so client-side routes survive a reload. To run the
+  dev server against another Charon, use `CHARON_URL=http://nas:8080 npm run dev` in `ui/`,
+  or allow its origin with `CHARON_CORS_ORIGINS`.
 
 ## Deploying on Synology
 
@@ -177,18 +223,32 @@ Three ways to stand it up:
 - `make dev` + `make dev-e2e` / `make smoke`: two local processes, files under `./var`.
 - `make docker-dev` + `make docker-e2e`: both containers via `docker/docker-compose.dev.yml`.
 
+## Test coverage
+
+Both halves must keep at least 90% coverage; `make coverage` (and `make check`) fail below it.
+
+| Command | Measures | Threshold configured in |
+|---|---|---|
+| `make py-coverage` | `charon/` and `fake_ds/`, line and branch, over the unit and in-process e2e suites. HTML report in `htmlcov/` | `[tool.coverage.*]` in `pyproject.toml` |
+| `make ui-coverage` | `ui/src`, statements, branches, functions and lines each. HTML report in `ui/coverage/` | `test.coverage.thresholds` in `ui/vite.config.ts` |
+
+Generated and test-only code is left out: the OpenAPI types (`schema.d.ts`), test helpers, and
+`ui/src/main.tsx`, which only wires real implementations together and is exercised by
+`make ui-e2e`.
+
 ## Architecture
 
 ```
 charon/
   domain/     models and pure rename/match logic
   ports/      interfaces: Downloader, JobStore, RuleStore, ApiKeyStore, FileOps, Clock
-  services/   DownloadService, RuleService, ApiKeyService, PostProcessor, Watcher
+  services/   DownloadService, RuleService, ApiKeyService, DestinationService, PostProcessor, Watcher
   adapters/   download_station/, sqlite/, local_fs.py
   api/        FastAPI routers, schemas, auth, error mapping
   bootstrap.py  composition root: the only module that knows concrete adapters
-fake_ds/      fake Download Station
+fake_ds/      fake Download Station, plus `python -m fake_ds.seed` for sample data
 docker/       Dockerfiles, compose files (NAS and local fake stack), .env.example
+ui/           web UI (React + Vite); built into the Docker image
 tests/unit    fast, isolated tests using in-memory fakes (tests/unit/fakes.py)
 tests/e2e     scripted API flows against Charon + fake Download Station
 ```

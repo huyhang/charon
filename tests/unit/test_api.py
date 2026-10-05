@@ -59,6 +59,24 @@ def test_list_downloads_with_status_filter_and_cursor(h: Harness) -> None:
     assert second["next_cursor"] is None
 
 
+def test_download_summary_counts_all_jobs_not_one_page(h: Harness) -> None:
+    for _ in range(3):
+        h.client.post("/downloads", json={"magnet": MAGNET})
+    h.client.delete("/downloads/job-2")
+    body = h.client.get("/downloads/summary").json()
+    expected = {status.value: 0 for status in JobStatus} | {"queued": 2, "cancelled": 1}
+    assert body == {"counts": expected, "download_speed_bps": 0}
+
+
+@pytest.mark.parametrize(
+    ("headers", "status"),
+    [({}, 401), ({"X-API-Key": "wrong"}, 401), ({"X-API-Key": "admin-secret"}, 200)],
+)
+def test_download_summary_requires_a_key(headers: dict, status: int) -> None:
+    h = Harness(admin_key="admin-secret")
+    assert h.client.get("/downloads/summary", headers=headers).status_code == status
+
+
 def test_cancel_and_retry_endpoints(h: Harness) -> None:
     job_id = h.client.post("/downloads", json={"magnet": MAGNET}).json()["id"]
     assert h.client.delete(f"/downloads/{job_id}").json()["status"] == "cancelled"
@@ -81,6 +99,30 @@ def test_rule_crud_and_preview(h: Harness) -> None:
     }
     assert h.client.delete(f"/rules/{rule_id}").status_code == 204
     assert h.client.get(f"/rules/{rule_id}").status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("body", "status", "expected"),
+    [
+        (
+            {"name": "Show.XYZ.mkv", "rule": RULE},
+            200,
+            {"rule_id": None, "new_name": "Show.ABC.mkv", "final_path": "/d/e/f/Show.ABC.mkv"},
+        ),
+        (
+            {"name": "Show.mp4", "rule": RULE},
+            200,
+            {"rule_id": None, "new_name": "Show.mp4", "final_path": None},
+        ),
+        ({"name": "x", "rule": RULE, "rule_id": "r"}, 422, None),
+        ({"name": "x", "rule": {**RULE, "match_type": "regex", "pattern": "("}}, 422, None),
+    ],
+)
+def test_preview_draft_rule(h: Harness, body: dict, status: int, expected: dict | None) -> None:
+    response = h.client.post("/rules/preview", json=body)
+    assert response.status_code == status
+    if expected is not None:
+        assert response.json() == expected
 
 
 @pytest.mark.parametrize(

@@ -1,7 +1,13 @@
 from fastapi import APIRouter, Depends, Query
 
 from charon.api.deps import get_download_service
-from charon.api.schemas import JobListView, JobView, SubmitDownloadRequest, error_responses
+from charon.api.schemas import (
+    DownloadSummaryView,
+    JobListView,
+    JobView,
+    SubmitDownloadRequest,
+    error_responses,
+)
 from charon.domain.models import JobStatus
 from charon.services.download_service import DownloadService
 
@@ -25,6 +31,15 @@ def list_downloads(
     page = service.list(status, limit, cursor)
     items = [JobView.from_job(j) for j in page.items]
     return JobListView(items=items, next_cursor=page.next_cursor)
+
+
+# Declared before /{job_id}, which would otherwise capture "summary" as an id.
+@router.get("/summary")
+def summarize_downloads(
+    service: DownloadService = Depends(get_download_service),
+) -> DownloadSummaryView:
+    """How many jobs are in each status, and the combined download speed."""
+    return DownloadSummaryView.from_summary(service.summary())
 
 
 @router.get("/{job_id}", responses=error_responses(404))

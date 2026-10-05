@@ -13,3 +13,7 @@ class LocalFileOps:
 
     def resolve(self, path: PurePosixPath) -> PurePosixPath:
         return PurePosixPath(os.path.realpath(path))
+
+    def list_folders(self, path: PurePosixPath) -> list[str]:
+        with os.scandir(path) as entries:
+            return sorted(entry.name for entry in entries if entry.is_dir())

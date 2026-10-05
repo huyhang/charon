@@ -56,3 +56,24 @@ def test_resolve_follows_symlinks_and_keeps_missing_parts(tmp_path) -> None:
     (tmp_path / "link").symlink_to(real)
     resolved = LocalFileOps().resolve(PurePosixPath(tmp_path / "link" / "new" / "dir"))
     assert resolved == PurePosixPath(real.resolve() / "new" / "dir")
+
+
+def test_list_folders_returns_sorted_directories_including_symlinked_ones(tmp_path) -> None:
+    (tmp_path / "tv").mkdir()
+    (tmp_path / "anime").mkdir()
+    (tmp_path / "file.txt").write_text("x")
+    (tmp_path / "linked").symlink_to(tmp_path / "tv")
+    (tmp_path / "broken").symlink_to(tmp_path / "missing")
+    assert LocalFileOps().list_folders(PurePosixPath(tmp_path)) == ["anime", "linked", "tv"]
+
+
+@pytest.mark.parametrize(
+    ("entry", "error"),
+    [("missing", FileNotFoundError), ("file", NotADirectoryError)],
+)
+def test_list_folders_rejects_non_directories(tmp_path, entry: str, error: type) -> None:
+    path = tmp_path / entry
+    if entry == "file":
+        path.write_text("x")
+    with pytest.raises(error):
+        LocalFileOps().list_folders(PurePosixPath(path))

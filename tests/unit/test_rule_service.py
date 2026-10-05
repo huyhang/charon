@@ -99,6 +99,45 @@ def test_preview(name: str, expected: tuple) -> None:
     ) == expected
 
 
+@pytest.mark.parametrize(
+    ("draft", "name", "expected"),
+    [
+        ({"pattern": "*.mkv"}, "Show.XYZ.mkv", ("Show.ABC.mkv", "/d/Show.ABC.mkv")),
+        ({"pattern": "*.mkv"}, "Show.XYZ.mp4", ("Show.XYZ.mp4", None)),
+        ({"pattern": "XYZ", "match_type": "regex"}, "A.XYZ.mp4", ("A.ABC.mp4", "/d/A.ABC.mp4")),
+        ({"pattern": "*", "enabled": False}, "Show.XYZ.mkv", ("Show.ABC.mkv", "/d/Show.ABC.mkv")),
+    ],
+    ids=["match", "no-match", "regex", "disabled-still-previews"],
+)
+def test_preview_draft_applies_only_the_draft(draft: dict, name: str, expected: tuple) -> None:
+    service, _ = make_service(make_rule(id="saved", pattern="*", destination="/other"))
+    spec = RuleSpec(
+        name="draft",
+        destination="/d",
+        steps=[{"op": "replace", "find": "XYZ", "replace": "ABC"}],
+        **draft,
+    )
+    preview = service.preview_draft(name, spec)
+    assert (preview.rule, preview.new_name, preview.final_path) == (None, *expected)
+
+
+@pytest.mark.parametrize(
+    ("draft", "name", "code"),
+    [
+        ({"destination": "/etc"}, "x.mkv", "destination_not_allowed"),
+        ({"steps": [{"op": "replace", "find": "a", "replace": "/"}]}, "a.mkv", "unsafe_name"),
+        ({"match_type": "regex", "pattern": r"(a|aa)+$"}, "a" * 40 + "!", "rule_timeout"),
+    ],
+)
+def test_preview_draft_errors(monkeypatch, draft: dict, name: str, code: str) -> None:
+    monkeypatch.setattr(rename, "REGEX_TIMEOUT_SECONDS", 0.05)
+    service = RuleService(InMemoryRuleStore(), STRICT)
+    spec = RuleSpec.model_validate({"name": "d", "pattern": "*", "destination": "/media", **draft})
+    with pytest.raises(InvalidInputError) as exc_info:
+        service.preview_draft(name, spec)
+    assert exc_info.value.code == code
+
+
 def test_preview_rejects_unsafe_result() -> None:
     rule = make_rule(steps=[{"op": "replace", "find": "a", "replace": "/"}])
     service, _ = make_service(rule)

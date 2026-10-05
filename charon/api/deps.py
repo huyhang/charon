@@ -4,6 +4,7 @@ from fastapi.security import APIKeyHeader
 from charon.container import Container
 from charon.domain.models import Principal
 from charon.services.api_key_service import ApiKeyService
+from charon.services.destination_service import DestinationService
 from charon.services.download_service import DownloadService
 from charon.services.rule_service import RuleService
 
@@ -24,6 +25,10 @@ def get_rule_service(container: Container = Depends(get_container)) -> RuleServi
 
 def get_api_key_service(container: Container = Depends(get_container)) -> ApiKeyService:
     return container.api_key_service
+
+
+def get_destination_service(container: Container = Depends(get_container)) -> DestinationService:
+    return container.destination_service
 
 
 def authenticate(

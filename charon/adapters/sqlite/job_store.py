@@ -44,6 +44,11 @@ class SqliteJobStore:
             rows = conn.execute(sql, params).fetchall()
         return [Job.model_validate_json(row[0]) for row in rows]
 
+    def count_by_status(self) -> dict[JobStatus, int]:
+        with self._db.transaction() as conn:
+            rows = conn.execute("SELECT status, COUNT(*) FROM jobs GROUP BY status").fetchall()
+        return {JobStatus(status): count for status, count in rows}
+
 
 def _filters(
     statuses: Collection[JobStatus] | None, after: JobCursor | None

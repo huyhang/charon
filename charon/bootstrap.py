@@ -20,6 +20,7 @@ from charon.container import Container
 from charon.domain.destinations import DestinationPolicy
 from charon.ports.downloader import Downloader
 from charon.services.api_key_service import ApiKeyService
+from charon.services.destination_service import DestinationService
 from charon.services.download_service import DownloadService
 from charon.services.post_processor import PostProcessor
 from charon.services.rule_service import RuleService
@@ -52,11 +53,12 @@ def build_container(settings: Settings) -> Container:
     downloader = DOWNLOADERS[settings.downloader](settings, closers)
     policy = build_destination_policy(settings)
     rule_service = RuleService(SqliteRuleStore(db), policy)
+    files = LocalFileOps()
     processor = PostProcessor(
         jobs,
         rule_service,
         downloader,
-        LocalFileOps(),
+        files,
         PurePosixPath(settings.download_dir),
         policy,
     )
@@ -64,6 +66,7 @@ def build_container(settings: Settings) -> Container:
         download_service=DownloadService(jobs, rule_service, downloader),
         rule_service=rule_service,
         api_key_service=ApiKeyService(SqliteApiKeyStore(db), _admin_key(settings)),
+        destination_service=DestinationService(settings.rule_roots, policy, files),
         downloader=downloader,
         watcher=Watcher(jobs, downloader, processor),
         poll_interval_seconds=settings.poll_interval_seconds,

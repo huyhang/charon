@@ -28,6 +28,10 @@ class JobStore(Protocol):
         """Return jobs newest first."""
         ...
 
+    def count_by_status(self) -> dict[JobStatus, int]:
+        """How many jobs are in each status; statuses without jobs may be left out."""
+        ...
+
 
 class RuleStore(Protocol):
     def add(self, rule: Rule) -> None: ...

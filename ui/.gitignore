@@ -1,0 +1,12 @@
+node_modules
+dist
+dev-dist
+playwright-report
+test-results
+coverage
+*.tsbuildinfo
+
+# The repository's Python ignores (lib/, downloads/) must not hide UI sources,
+# from git or from Tailwind's class scanner.
+!src/lib/
+!src/features/downloads/

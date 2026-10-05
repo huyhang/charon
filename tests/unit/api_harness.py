@@ -8,6 +8,7 @@ from charon.api.app import create_app
 from charon.container import Container
 from charon.domain.destinations import DestinationPolicy
 from charon.services.api_key_service import ApiKeyService
+from charon.services.destination_service import DestinationService
 from charon.services.download_service import DownloadService
 from charon.services.post_processor import PostProcessor
 from charon.services.rule_service import RuleService
@@ -31,6 +32,7 @@ class Harness:
         cors_origins: list[str] | None = None,
         ui_dir: Path | None = None,
         policy: DestinationPolicy = ALLOW_ALL,
+        roots: tuple[str, ...] = ("/",),
     ) -> None:
         self.jobs = InMemoryJobStore()
         self.downloader = FakeDownloader()
@@ -54,6 +56,7 @@ class Harness:
             ),
             rule_service=rules,
             api_key_service=self.api_keys,
+            destination_service=DestinationService(roots, policy, self.files),
             downloader=self.downloader,
             watcher=self.watcher,
             cors_origins=cors_origins or [],

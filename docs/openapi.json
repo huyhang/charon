@@ -66,6 +66,48 @@
         "title": "CreateApiKeyRequest",
         "type": "object"
       },
+      "DestinationRootsView": {
+        "properties": {
+          "roots": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Roots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "roots"
+        ],
+        "title": "DestinationRootsView",
+        "type": "object"
+      },
+      "DownloadSummaryView": {
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Jobs per status; every status is present.",
+            "propertyNames": {
+              "$ref": "#/components/schemas/JobStatus"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "download_speed_bps": {
+            "description": "Combined speed of every downloading job.",
+            "title": "Download Speed Bps",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "counts",
+          "download_speed_bps"
+        ],
+        "title": "DownloadSummaryView",
+        "type": "object"
+      },
       "ErrorBody": {
         "properties": {
           "error": {
@@ -120,6 +162,58 @@
         ],
         "title": "ErrorStage",
         "type": "string"
+      },
+      "FolderListingView": {
+        "properties": {
+          "folders": {
+            "items": {
+              "$ref": "#/components/schemas/FolderView"
+            },
+            "title": "Folders",
+            "type": "array"
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when going up would leave the allowed roots.",
+            "title": "Parent"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "parent",
+          "folders"
+        ],
+        "title": "FolderListingView",
+        "type": "object"
+      },
+      "FolderView": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "path"
+        ],
+        "title": "FolderView",
+        "type": "object"
       },
       "HealthView": {
         "properties": {
@@ -352,6 +446,17 @@
             "title": "Name",
             "type": "string"
           },
+          "rule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RuleSpec"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Preview this unsaved rule instead."
+          },
           "rule_id": {
             "anyOf": [
               {
@@ -361,6 +466,7 @@
                 "type": "null"
               }
             ],
+            "description": "Force this saved rule.",
             "title": "Rule Id"
           }
         },
@@ -381,6 +487,7 @@
                 "type": "null"
               }
             ],
+            "description": "Null when no rule applies.",
             "title": "Final Path"
           },
           "new_name": {
@@ -396,6 +503,7 @@
                 "type": "null"
               }
             ],
+            "description": "The saved rule that applied, if any.",
             "title": "Rule Id"
           }
         },
@@ -1058,6 +1166,124 @@
         ]
       }
     },
+    "/api/v1/destinations/folders": {
+      "get": {
+        "description": "The folders directly inside `path`, for picking a rule destination. Never lists files.",
+        "operationId": "listDestinationFolders",
+        "parameters": [
+          {
+            "description": "An absolute folder inside a root.",
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "description": "An absolute folder inside a root.",
+              "minLength": 1,
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderListingView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "List Destination Folders",
+        "tags": [
+          "destinations"
+        ]
+      }
+    },
+    "/api/v1/destinations/roots": {
+      "get": {
+        "description": "The folders rule destinations must sit inside (CHARON_RULE_ROOTS).",
+        "operationId": "listDestinationRoots",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DestinationRootsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "List Destination Roots",
+        "tags": [
+          "destinations"
+        ]
+      }
+    },
     "/api/v1/downloads": {
       "get": {
         "operationId": "listDownloads",
@@ -1212,6 +1438,53 @@
           }
         ],
         "summary": "Submit Download",
+        "tags": [
+          "downloads"
+        ]
+      }
+    },
+    "/api/v1/downloads/summary": {
+      "get": {
+        "description": "How many jobs are in each status, and the combined download speed.",
+        "operationId": "summarizeDownloads",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadSummaryView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Summarize Downloads",
         "tags": [
           "downloads"
         ]
@@ -1573,6 +1846,7 @@
     },
     "/api/v1/rules/preview": {
       "post": {
+        "description": "Dry run: what `name` would become, under the saved rules or an unsaved draft `rule`.",
         "operationId": "previewRule",
         "requestBody": {
           "content": {
