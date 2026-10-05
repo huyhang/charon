@@ -90,11 +90,22 @@ Keep the SSH session open; later steps use it. You can disable SSH again at the 
 
 ## 4. Configure Download Station
 
-1. Open **Download Station** and go to **Settings**.
-2. Under **Location**, set the default destination to `downloads`. Charon sends its own
-   destination with every task anyway, so this only affects downloads you add by hand.
-3. Leave other BitTorrent settings as you like. Charon removes each task after moving its
-   files, so seeding limits only matter while a download is still in Download Station.
+Download Station keeps the default download folder per DSM user, and Charon adds its tasks
+as `charon`, so set it for that account:
+
+1. Sign in to DSM as `charon`. A private browser window keeps you signed in as yourself
+   elsewhere.
+2. Open **Download Station → Settings → Location** and set the default destination to
+   `downloads`, the same folder as `CHARON_DS_DESTINATION` (step 6).
+3. Sign out.
+
+Charon names the folder for every task, but that isn't enough: until `charon` has a default
+destination of its own, Download Station leaves its tasks at **Waiting** and they never
+start. Your own account's **Location** is separate and only affects downloads you add by
+hand.
+
+Leave the BitTorrent settings as you like. Charon removes each task after moving its files,
+so seeding limits only matter while a download is still in Download Station.
 
 Don't set up anything in Download Station that moves completed files out of `downloads`,
 or Charon won't find them.
@@ -348,6 +359,7 @@ that:
 | `Synology error 401` / `402` | The `charon` account is disabled, or lacks the Download Station application permission (step 3). |
 | `Synology error 403` | 2-factor authentication is on for `charon`. Turn it off for this account. |
 | `Synology error 407` | DSM Auto Block blocked the container's IP after failed logins. In **Control Panel → Security → Protection**, remove it from the block list and add the Docker subnet (usually `172.16.0.0/12`) to the allow list. |
+| A download stays **Queued** in Charon (**Waiting** in Download Station), but the same magnet starts at once when you add it by hand | The `charon` account has no default destination in Download Station. Set one while signed in as `charon` (step 4). If the waiting task still doesn't start, cancel the job and submit the magnet again. |
 | Job fails with `source_missing` | Charon can't see what Download Station wrote: `CHARON_DOWNLOADS_DIR` and `CHARON_DS_DESTINATION` point at different folders. |
 | Job fails with `move_failed` or `filesystem_error` (permission denied) | `PUID`/`PGID` don't match `charon`, or `charon` lacks Read/Write on the destination's shared folder or can't open a folder on the way to it. Fix it, then `POST /api/v1/downloads/<id>/retry`. |
 | Job fails with `rule_timeout` | A rule's regex took over a second on the download's name, usually because of a nested repeat like `(a+)+`. Simplify it, check it with `POST /api/v1/rules/preview`, then retry the job. |
