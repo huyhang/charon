@@ -157,8 +157,9 @@ HTTPS without touching DSM:
    ```
 
    If `tailscale` isn't on your `PATH`, it's `/var/packages/Tailscale/target/bin/tailscale`.
-   `--bg` keeps the setting across reboots. Check it with `tailscale serve status`; undo it
-   with `tailscale serve reset`.
+   `--bg` keeps the setting across reboots. Check it with `tailscale serve status`. To stop
+   serving Charon, run `sudo tailscale serve --https=443 off`; `tailscale serve reset`
+   would also stop every other service the NAS serves.
 3. Open `https://<nas-name>.<tailnet>.ts.net`. The first visit can take a few seconds while
    Tailscale gets a certificate. It renews the certificate itself, so you don't need the
    scheduled root scripts some guides suggest (those install the certificate into DSM, which
@@ -168,6 +169,22 @@ Point `serve` at an address Charon listens on. `127.0.0.1` works when `CHARON_BI
 `0.0.0.0` (the default) or `127.0.0.1`. If you bound Charon to the LAN IP, use that instead,
 e.g. `http://192.168.1.10:8080`. Binding to `127.0.0.1` makes the Tailscale HTTPS address
 the only way in.
+
+**Serving other services too.** The NAS can serve several services this way; each needs its
+own HTTPS port or path. Running `serve` again for a port and path already in use replaces
+what was there, so give each service its own:
+
+```bash
+sudo tailscale serve --bg http://127.0.0.1:8080                        # Charon: https://<nas>.<tailnet>.ts.net/
+sudo tailscale serve --bg --https=8443 http://127.0.0.1:9000           # https://<nas>.<tailnet>.ts.net:8443/
+sudo tailscale serve --bg --set-path /other http://127.0.0.1:9001      # https://<nas>.<tailnet>.ts.net/other
+sudo tailscale serve status                                            # everything being served
+```
+
+A separate port works for any service. A path only works for apps that support running
+under a sub-path. Charon doesn't, so keep it at `/` (or on its own port) and give paths to
+the others. Stop one service at a time with `off` on the same flags, e.g.
+`sudo tailscale serve --https=8443 off` or `sudo tailscale serve --set-path /other off`.
 
 Certificates are recorded in public Certificate Transparency logs, so your NAS and tailnet
 names become publicly visible. Nothing becomes reachable, but pick names you don't mind
