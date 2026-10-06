@@ -6,7 +6,14 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { pollInterval, statusesFor, summaryPollInterval, type FilterId } from "@/lib/jobs";
+import {
+  nextPageCursor,
+  PAGE_SIZE,
+  pollInterval,
+  statusesFor,
+  summaryPollInterval,
+  type FilterId,
+} from "@/lib/jobs";
 import { priorityChanges } from "@/lib/rules";
 import { useClient } from "./context";
 import type { Job, JobList, PreviewRequest, Principal, Role, Rule, RuleSpec } from "./types";
@@ -27,7 +34,6 @@ export const queryKeys = {
   preview: (request: PreviewRequest) => ["preview", request] as const,
 };
 
-export const PAGE_SIZE = 30;
 const HEALTH_POLL_MS = 15000;
 export const SESSION_CHECK_MS = 30000;
 
@@ -52,7 +58,7 @@ export function useDownloads(filter: FilterId) {
     queryFn: ({ pageParam }) =>
       client.listDownloads({ status: statusesFor(filter), limit: PAGE_SIZE, cursor: pageParam }),
     initialPageParam: null as string | null,
-    getNextPageParam: (last) => last.next_cursor,
+    getNextPageParam: (_last, pages) => nextPageCursor(pages),
     refetchInterval: (query) => pollInterval(allJobs(query.state.data)),
   });
 }

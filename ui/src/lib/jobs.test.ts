@@ -1,11 +1,15 @@
-import type { JobStatus } from "@/api/types";
+import type { JobList, JobStatus } from "@/api/types";
 import { makeJob } from "@/test/factories";
 import {
   canCancel,
   canRetry,
   FAST_POLL_MS,
   isInFlight,
+  isListCapped,
   jobTitle,
+  MAX_LISTED,
+  nextPageCursor,
+  PAGE_SIZE,
   pollInterval,
   SLOW_POLL_MS,
   statusesFor,
@@ -116,5 +120,31 @@ describe("jobTitle", () => {
     [null, "magnet:?xt=urn:btih:a", null],
   ])("name=%s", (name, magnet, expected) => {
     expect(jobTitle({ name, magnet })).toBe(expected);
+  });
+});
+
+describe("list cap", () => {
+  /** Pages with these many jobs each; the last page reports `more` as its next cursor. */
+  const pages = (sizes: number[], more: string | null): JobList[] =>
+    sizes.map((size, index) => ({
+      items: Array.from({ length: size }, (_, i) => makeJob({ id: `p${index}-${i}` })),
+      next_cursor: index === sizes.length - 1 ? more : `c${index + 1}`,
+    }));
+
+  it("is a whole number of pages", () => {
+    expect(MAX_LISTED % PAGE_SIZE).toBe(0);
+  });
+
+  it.each<[string, JobList[], string | null, boolean]>([
+    ["nothing loaded yet", [], null, false],
+    ["more to load", pages([25], "c1"), "c1", false],
+    ["end of the list", pages([25, 10], null), null, false],
+    ["three pages, more to load", pages([25, 25, 25], "c3"), "c3", false],
+    ["cap reached, more in Charon", pages([25, 25, 25, 25], "c4"), null, true],
+    ["cap reached exactly at the end", pages([25, 25, 25, 25], null), null, false],
+    ["past the cap (larger pages)", pages([60, 60], "c2"), null, true],
+  ])("%s", (_label, loaded, cursor, capped) => {
+    expect(nextPageCursor(loaded)).toBe(cursor);
+    expect(isListCapped(loaded)).toBe(capped);
   });
 });

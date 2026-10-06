@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FILTERS, type FilterId } from "@/lib/jobs";
+import { FILTERS, isListCapped, MAX_LISTED, type FilterId } from "@/lib/jobs";
 import { isMagnet } from "@/lib/magnet";
 import { JobCard } from "./JobCard";
 import { JobDrawer } from "./JobDrawer";
@@ -127,6 +127,11 @@ export function DownloadsPage() {
                   Load more
                 </Button>
               </div>
+            )}
+            {isListCapped(downloads.data?.pages ?? []) && (
+              <p className="pt-2 text-center text-xs text-muted-foreground">
+                Showing the newest {MAX_LISTED} downloads. Older ones are still in Charon.
+              </p>
             )}
           </div>
         )}

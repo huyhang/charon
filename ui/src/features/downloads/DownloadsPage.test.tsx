@@ -1,8 +1,8 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ApiError } from "@/api/errors";
-import type { JobStatus } from "@/api/types";
-import type { FilterId } from "@/lib/jobs";
+import type { JobStatus, ListDownloadsQuery } from "@/api/types";
+import { PAGE_SIZE, type FilterId } from "@/lib/jobs";
 import { createFakeClient } from "@/test/fakeClient";
 import { makeJob } from "@/test/factories";
 import { renderWithApp } from "@/test/render";
@@ -65,7 +65,7 @@ describe("DownloadsPage", () => {
     await waitFor(() =>
       expect(client.listDownloads).toHaveBeenCalledWith({
         status: statuses,
-        limit: 30,
+        limit: PAGE_SIZE,
         cursor: null,
       }),
     );
@@ -81,6 +81,38 @@ describe("DownloadsPage", () => {
     await renderWithApp(<DownloadsPage />, { client, route: "/downloads", path: PATH });
     await userEvent.click(await screen.findByRole("button", { name: "Load more" }));
     expect(await screen.findByRole("button", { name: "Old.mkv" })).toBeInTheDocument();
+  });
+
+  /** Serves `total` jobs newest first, `limit` at a time, with offset cursors. */
+  function pagedServer(total: number) {
+    const all = Array.from({ length: total }, (_, i) =>
+      makeJob({ id: `j${i}`, name: `Job.${i}.mkv` }),
+    );
+    return async ({ limit = PAGE_SIZE, cursor }: ListDownloadsQuery) => {
+      const start = cursor ? Number(cursor) : 0;
+      const end = start + limit;
+      return { items: all.slice(start, end), next_cursor: end < total ? String(end) : null };
+    };
+  }
+
+  it.each<[number, number, boolean]>([
+    [60, 60, false],
+    [100, 100, false],
+    [130, 100, true],
+  ])("with %i downloads, Load more stops at %i (capped: %s)", async (total, shown, capped) => {
+    const client = createFakeClient({ listDownloads: pagedServer(total) });
+    await renderWithApp(<DownloadsPage />, { client, route: "/downloads", path: PATH });
+    const cards = () => screen.queryAllByRole("button", { name: /^Job\.\d+\.mkv$/ });
+    await waitFor(() => expect(cards()).toHaveLength(Math.min(total, PAGE_SIZE)));
+    for (let loaded = PAGE_SIZE; loaded < shown; loaded += PAGE_SIZE) {
+      await userEvent.click(screen.getByRole("button", { name: "Load more" }));
+      await waitFor(() => expect(cards()).toHaveLength(Math.min(shown, loaded + PAGE_SIZE)));
+    }
+    expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Showing the newest 100 downloads/) !== null).toBe(capped);
+    expect(client.listDownloads.mock.calls.every(([query]) => query.limit === PAGE_SIZE)).toBe(
+      true,
+    );
   });
 
   it("opens a job's details from the URL", async () => {

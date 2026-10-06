@@ -1,4 +1,4 @@
-import type { DownloadSummary, Job, JobStatus } from "@/api/types";
+import type { DownloadSummary, Job, JobList, JobStatus } from "@/api/types";
 import { magnetName } from "./magnet";
 
 export type Tone = "neutral" | "info" | "progress" | "success" | "danger" | "muted";
@@ -51,6 +51,29 @@ export function statusesFor(filter: FilterId): JobStatus[] | undefined {
 
 export const FAST_POLL_MS = 1500;
 export const SLOW_POLL_MS = 15000;
+
+/** Downloads per page; MAX_LISTED is a whole number of pages. */
+export const PAGE_SIZE = 25;
+/**
+ * The list stops at the newest this many downloads per filter. Polling re-fetches every loaded
+ * page, so this also caps each poll at MAX_LISTED / PAGE_SIZE requests.
+ */
+export const MAX_LISTED = 100;
+
+const loadedCount = (pages: readonly JobList[]) =>
+  pages.reduce((count, page) => count + page.items.length, 0);
+
+/** The cursor for "Load more": null at the end of the list, or once MAX_LISTED are loaded. */
+export function nextPageCursor(pages: readonly JobList[]): string | null {
+  const last = pages.at(-1);
+  if (!last || loadedCount(pages) >= MAX_LISTED) return null;
+  return last.next_cursor;
+}
+
+/** Whether Charon has more downloads than the list will show. */
+export function isListCapped(pages: readonly JobList[]): boolean {
+  return loadedCount(pages) >= MAX_LISTED && Boolean(pages.at(-1)?.next_cursor);
+}
 
 /** Poll quickly only while something is moving. */
 export function pollInterval(jobs: readonly Job[]): number {

@@ -129,7 +129,8 @@ Errors always look like `{"error": {"code": "...", "message": "..."}}`.
 
 Charon ships with a web UI in `ui/` (React, TypeScript, Vite, Tailwind, shadcn/ui). The
 Docker image builds it and serves it at `/`, so on the NAS just open `http://nas:8080` and
-sign in with an API key. It installs as an app (PWA) from the browser menu.
+sign in with an API key. Over HTTPS it also installs as an app (PWA); see
+[HTTPS over Tailscale](#https-over-tailscale) and [Installing on iPhone](#installing-on-iphone).
 
 - **Downloads:** paste a magnet link (into the bar or anywhere on the page) and see which
   rule will match and what the file will be called before you submit. Live progress, filters,
@@ -139,6 +140,55 @@ sign in with an API key. It installs as an app (PWA) from the browser menu.
   unsaved draft on the server as you type.
 - **API keys** (admins): issue a key and see it once, revoke with a confirmation.
 - ⌘K / Ctrl+K command palette, light and dark themes, phone layout.
+
+### HTTPS over Tailscale
+
+Tailscale already encrypts traffic between your devices, so plain `http://` is safe on your
+tailnet. HTTPS is still worth having for the browser's sake: installing as an app needs it,
+and browsers stop marking the page "Not secure". If Tailscale runs on the NAS, it can provide
+HTTPS without touching DSM:
+
+1. In the Tailscale admin console, under **DNS**, enable **MagicDNS** and **HTTPS
+   Certificates**.
+2. Over SSH on the NAS, have Tailscale serve Charon over HTTPS:
+
+   ```bash
+   sudo tailscale serve --bg http://127.0.0.1:8080
+   ```
+
+   If `tailscale` isn't on your `PATH`, it's `/var/packages/Tailscale/target/bin/tailscale`.
+   `--bg` keeps the setting across reboots. Check it with `tailscale serve status`; undo it
+   with `tailscale serve reset`.
+3. Open `https://<nas-name>.<tailnet>.ts.net`. The first visit can take a few seconds while
+   Tailscale gets a certificate. It renews the certificate itself, so you don't need the
+   scheduled root scripts some guides suggest (those install the certificate into DSM, which
+   Charon doesn't need).
+
+Point `serve` at an address Charon listens on. `127.0.0.1` works when `CHARON_BIND_IP` is
+`0.0.0.0` (the default) or `127.0.0.1`. If you bound Charon to the LAN IP, use that instead,
+e.g. `http://192.168.1.10:8080`. Binding to `127.0.0.1` makes the Tailscale HTTPS address
+the only way in.
+
+Certificates are recorded in public Certificate Transparency logs, so your NAS and tailnet
+names become publicly visible. Nothing becomes reachable, but pick names you don't mind
+being seen.
+
+### Installing on iPhone
+
+1. Connect the iPhone to your tailnet with the Tailscale app.
+2. In Safari, open Charon, ideally at its `https://…ts.net` address (see above).
+3. Tap **Share → Add to Home Screen → Add**.
+4. Open Charon from the home screen and sign in. Home-screen apps keep their own storage,
+   separate from Safari, so you sign in again. A key issued just for the phone
+   (**API keys → Issue key**) can later be revoked on its own.
+
+It opens full screen with Charon's icon and the phone layout. Over HTTPS it keeps its
+interface cached, so it opens instantly and updates itself in the background. Over plain
+HTTP it's a full-screen shortcut that loads everything over the network each time.
+
+iOS doesn't let web apps receive shares or open `magnet:` links, so tapping a magnet won't
+open Charon. Long-press it, choose **Copy**, then paste it into Charon's magnet field, which
+shows the matching rule before you submit.
 
 ### Developing the UI against the fakes
 
@@ -174,8 +224,10 @@ How it fits together:
   (`ui/src/test/fakeClient.ts`). Formatting, matching, diffing and error hints are pure
   functions in `ui/src/lib`.
 - **Live data** is polled: every 1.5 s while anything is in flight, every 15 s otherwise,
-  paused in background tabs. The totals above the list come from `GET /downloads/summary`,
-  so they count every job, not just the loaded page.
+  paused in background tabs. Each poll re-fetches every loaded page, so the list loads 25 at a
+  time and stops at the newest 100 downloads per filter (older ones stay in Charon, and
+  `/downloads/<id>` still opens them). The totals above the list come from
+  `GET /downloads/summary`, so they count every job, not just the loaded pages.
 - **Sessions.** The key is re-checked every 30 s and when the tab regains focus, so a revoked
   key signs the browser out on any page. If Charon can't be reached when the UI opens, it
   says so and retries every few seconds instead of asking for a key.
