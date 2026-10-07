@@ -201,11 +201,11 @@ export function FeedsPage() {
                 onClick={onMarkAllSeen}
                 disabled={!anythingNew || markAllSeen.isPending}
               >
-                <CheckCheckIcon /> <span className="hidden sm:inline">Mark all seen</span>
+                <CheckCheckIcon /> <span className="sr-only sm:not-sr-only">Mark all seen</span>
               </Button>
               <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>
                 <RefreshCwIcon className={cn(refreshing && "animate-spin")} />
-                <span className="hidden sm:inline">Refresh</span>
+                <span className="sr-only sm:not-sr-only">Refresh</span>
               </Button>
               <Button size="sm" onClick={() => setAdding({ url: null })}>
                 <PlusIcon /> Add feed

@@ -261,6 +261,18 @@ describe("FeedsPage", () => {
     await waitFor(() => expect(button.hasAttribute("disabled")).toBe(!offered));
   });
 
+  it.each(["Mark all seen", "Refresh"])(
+    "names the %s button even where only its icon shows",
+    async (label) => {
+      await setup();
+      await row(NEW_SHOW.name);
+      const text = screen.getByText(label, { selector: "span" });
+      expect(text).toHaveClass("sr-only");
+      expect(text).not.toHaveClass("hidden");
+      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+    },
+  );
+
   it("refreshes the counts whenever the list refreshes, as new items arrive", async () => {
     const { client, queryClient } = await setup();
     await row(NEW_SHOW.name);
