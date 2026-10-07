@@ -1,3 +1,4 @@
+import logging
 from http import HTTPStatus
 
 from fastapi import FastAPI, Request
@@ -15,6 +16,9 @@ from charon.errors import (
     NotFoundError,
     UnauthorizedError,
 )
+from charon.hints import hint_for, is_retryable
+
+log = logging.getLogger(__name__)
 
 _STATUS_CODES: list[tuple[type[CharonError], int]] = [
     (UnauthorizedError, 401),
@@ -31,11 +35,21 @@ def status_code_for(exc: CharonError) -> int:
 
 
 def error_body(code: str, message: str, **extra: object) -> dict[str, object]:
-    return {"error": {"code": code, "message": message, **extra}}
+    detail = {"code": code, "message": message, "hint": hint_for(code)}
+    return {"error": {**detail, "retryable": is_retryable(code), **extra}}
 
 
 async def _charon_error(_: Request, exc: CharonError) -> JSONResponse:
-    return JSONResponse(error_body(exc.code, exc.message), status_code=status_code_for(exc))
+    extra = {"details": exc.details} if exc.details is not None else {}
+    body = error_body(exc.code, exc.message, **extra)
+    return JSONResponse(body, status_code=status_code_for(exc))
+
+
+async def _unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+    """A bug, not a client mistake: logged in full, answered with the usual error body."""
+    log.error("unexpected error on %s %s", request.method, request.url.path, exc_info=exc)
+    body = error_body("internal_error", "something unexpected went wrong")
+    return JSONResponse(body, status_code=500)
 
 
 async def _validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
@@ -55,3 +69,4 @@ def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(CharonError, _charon_error)
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(StarletteHTTPException, _http_error)
+    app.add_exception_handler(Exception, _unexpected_error)

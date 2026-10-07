@@ -2,7 +2,8 @@
 
 A small, API-first service for a Synology NAS. Send it a magnet link and it downloads the
 torrent through Download Station, tracks progress, then renames and moves the result
-according to your post-download rules.
+according to your post-download rules. Subscribe it to RSS feeds of magnet links to see
+what's new at a glance, and which of it your rules would file.
 
 It is meant to be reached only from your LAN or Tailscale.
 
@@ -32,14 +33,26 @@ when `CHARON_ADMIN_API_KEY` is set (see [API keys](#api-keys)). Paths below omit
 
 | Method & path | Purpose |
 |---|---|
-| `POST /downloads` `{magnet, rule_id?}` | Submit a magnet; `rule_id` forces a rule. Returns `202` + job |
+| `POST /downloads` `{magnet, rule_id?}` | Submit a magnet; `rule_id` forces a rule. `202` + new job, or `200` + the existing job if the torrent is already in Charon (`409 torrent_exists` if that job has another rule) |
 | `GET /downloads?status=&limit=&cursor=` | List jobs, newest first, cursor-paginated |
 | `GET /downloads/summary` | Jobs per status across all jobs, and the combined download speed |
 | `GET /downloads/{id}` | Job status and progress |
 | `DELETE /downloads/{id}` | Cancel a queued, downloading or completed job |
 | `POST /downloads/{id}/retry` | Retry a failed job (a failed download gets a fresh task) |
-| `GET/POST /rules`, `GET/PUT/DELETE /rules/{id}` | Manage rules |
+| `GET/POST /rules`, `GET/PUT/DELETE /rules/{id}` | Manage rules. `PUT` with `version` (or `If-Match`) refuses to overwrite a newer edit |
+| `POST /rules/reorder` `{ids}` | Put every rule in a new order at once |
 | `POST /rules/preview` `{name, rule_id? \| rule?}` | Dry run: what a name would become, under the saved rules or an unsaved draft `rule` |
+| `GET/POST /feeds`, `GET/PUT/DELETE /feeds/{id}` | Manage feed subscriptions (see [Feeds](#feeds)) |
+| `POST /feeds/preview` `{url}` | Read a feed without subscribing: title, counts, newest items checked against the rules |
+| `POST /feeds/refresh` | Fetch every enabled feed now (paused ones are skipped) |
+| `POST /feeds/{id}/refresh` | Fetch one feed now |
+| `GET /feeds/{id}/url` | A feed's whole address, passkey included (admin only) |
+| `GET /feeds/items?feed_id=&match=&unseen=&q=&limit=&cursor=` | Items from every feed, newest first, each with its matching rule and download |
+| `POST /feeds/items/{info_hash}/download` `{rule_id?}` | Download an item (`200` if it's already in Charon) |
+| `POST /feeds/items/seen` `{info_hashes}` | Mark exactly these items as seen |
+| `POST /feeds/items/seen-all` `{up_to, feed_id?, match?, q?}` | Mark everything in a view as seen, if first seen at or before `up_to` |
+| `GET /feeds/summary` | Unseen items, in total and per feed |
+| `GET /events?after=&limit=&type=` | What happened since a cursor (see [For scripts and agents](#for-scripts-and-agents)) |
 | `GET /destinations/roots` | The folders rule destinations must be inside |
 | `GET /destinations/folders?path=` | Folder names directly inside `path` (never files), for picking a destination |
 | `POST /api-keys` `{name, role?}` | Issue a key (admin only). The secret is returned once |
@@ -65,7 +78,12 @@ A job moves through `queued → downloading → completed → processing → don
 }
 ```
 
-Errors always look like `{"error": {"code": "...", "message": "..."}}`.
+Errors always look like
+`{"error": {"code": "...", "message": "...", "hint": "...", "retryable": false}}`: a stable
+`code`, a `hint` saying what to do about it in plain language (or `null`), and whether
+sending the same request again later may work. Validation errors add field-level `details`,
+and some others add specifics there too (e.g. which job already has a torrent). Anything
+unexpected is a `500` with `internal_error`, in the same shape. A job's `error` has a `hint` too.
 
 ### Rules
 
@@ -81,6 +99,12 @@ Errors always look like `{"error": {"code": "...", "message": "..."}}`.
 }
 ```
 
+- A rule may carry a `description` saying why it exists. Every save bumps its `version`,
+  also sent as the `ETag`; send the `version` you loaded with `PUT` (or the ETag as
+  `If-Match`), and the save fails with `409 rule_changed` instead of overwriting someone else's
+  edit. `POST /rules/reorder` re-spaces priorities 10, 20, 30… in one go, and fails with
+  `409 rules_changed` if any rule was added, removed or edited meanwhile; `details` lists ids
+  that are unknown or missing.
 - Enabled rules are tried in ascending `priority`; the first whose `pattern` (glob or regex)
   matches the download name wins. Equal priorities go to the older rule (`created_at`), and
   editing a rule keeps its place. A submission's `rule_id` overrides matching.
@@ -104,6 +128,70 @@ Errors always look like `{"error": {"code": "...", "message": "..."}}`.
   `move_failed` and the OS message. Fix the permissions, then retry. A job never stays stuck
   in `processing`: anything unexpected fails it with `internal_error` (details in the log).
 - After a successful move, the task is removed from Download Station (seeding stops).
+
+### Feeds
+
+Subscribe to RSS feeds whose items link to magnets (in `<link>`, an `<enclosure>`, or the
+`<guid>`); items without one are skipped. Subscribing twice to the same address is
+`409 feed_exists`. Charon checks each enabled feed every
+`refresh_minutes` (5 minutes to a day, default 15), politely: it sends the feed's `ETag` and
+`Last-Modified` back, so an unchanged feed isn't downloaded again.
+
+- **One list of items.** `GET /feeds/items` merges every feed, newest `published_at` first.
+  An item is a torrent, identified by its info hash, so one listed by two feeds is one item
+  with both feeds. Items without a `<pubDate>` are dated when Charon first saw them
+  (`published_estimated: true`).
+- **Checked against the rules as they are now.** Each item says which rule would file it and
+  what it would be called (`match`), or why that rule can't apply to it (`match_error`).
+  Editing a rule changes this immediately. Rules see the magnet's name (`dn`), which is what
+  Download Station will call the download, or the item's title if there is none.
+- **In Charon already?** `job` is the newest download of the same torrent, however it was
+  added (from the feed, or by pasting the magnet). Downloading an item that's already in
+  Charon returns that job; one whose job was cancelled or failed starts afresh.
+- **New and seen.** Items are new until marked seen. The UI marks exactly the new items it
+  showed when you switch feed, filter or search, leave the page, or leave the tab, so items a
+  filter hid or that you hadn't loaded stay new. **Mark all seen** marks the whole view (its
+  feed, filter and search), up to the newest item shown. Seen state is stored in Charon, so
+  every device agrees.
+- **Auto-download** (per feed, off by default) downloads new items that match a rule: items
+  that feed first lists after you turn it on (even if another feed listed them earlier), never
+  its backlog. An item dated more than a day before you turned it on is an old release listed
+  again, and is left alone. A torrent that is or was in Charon, even cancelled or failed, is
+  never taken again. Paused feeds never auto-download. If Download Station can't take an item,
+  `auto_error` says why and it's tried again on the next refresh, without holding up the rest.
+  These downloads are credited to `auto-download`.
+- **Addresses are secrets.** Feed URLs often hold a passkey, so responses mask them
+  (`https://tracker.example/rss?passkey=••••`), errors and logs name only the host, and only
+  admin keys can read the whole address (`GET /feeds/{id}/url`) or change it. Any key can
+  subscribe.
+- **Health.** A feed that can't be fetched or read keeps its items and reports `last_error`
+  with a hint (unreachable, an HTTP error, not RSS, no magnet links, too large, or something
+  Charon couldn't make sense of). It's retried on its next check. Addresses with an invalid
+  host or port are refused when you subscribe.
+- Items stay while a feed lists them, plus 30 days after. A paused or failing feed may still
+  list them, so its items are kept as of its last successful read.
+
+### For scripts and agents
+
+Charon is meant to be driven by scripts and, someday, an AI agent as well as by people:
+
+- **Who did what.** Jobs record `created_by`, and rules and feeds record `created_by` and
+  `updated_by`: the name and id of the API key that made the change. Issue each script or
+  agent its own key and you can tell their changes apart.
+- **Safe to retry.** Submitting a torrent that's already in Charon (same info hash, not
+  cancelled or failed) returns the existing job with `200`, or `409 torrent_exists` with the
+  job's id in `details` if you asked for another rule. `POST /downloads`, `/rules` and `/feeds`
+  accept an `Idempotency-Key` header: repeating a request with the same key returns what the
+  first one created, with `200`, for a day, even if both arrive at once. Keys belong to the API
+  key that sent them, so two clients can't collide. Reusing a key for a different request is
+  `409 idempotency_key_reused`.
+- **Events.** `GET /events?after=<cursor>` lists what happened since the cursor, oldest first:
+  `job.created`, `job.status_changed`, `rule.created` / `updated` / `deleted`,
+  `rules.reordered`, `feed.created` / `updated` / `deleted`, `feed.health_changed`,
+  `feed_item.added` and `feed_item.downloaded`, each with its actor. `rule.updated` and
+  `feed.updated` list the names of the fields that `changed` (never a feed's address itself).
+  Pass the returned `cursor` as `after` next time to follow along; filter with `type=`
+  (repeatable). Events are kept for 30 days.
 
 ### API keys
 
@@ -135,6 +223,12 @@ sign in with an API key. Over HTTPS it also installs as an app (PWA); see
 - **Downloads:** paste a magnet link (into the bar or anywhere on the page) and see which
   rule will match and what the file will be called before you submit. Live progress, filters,
   a detail drawer with the job's timeline, and plain-language fixes for every failure.
+- **Feeds:** an inbox of every feed's items, grouped by day, newest first, with what's new
+  since your last visit. Each item shows the rule that would file it (expand it for the
+  rename and folder), or offers to create a rule from it. One-tap download (or pick the rule),
+  multi-select, filters (matches a rule / no rule), search, and keyboard shortcuts (`j`/`k`,
+  `x`, `d`, `⏎`, `/`). Add a feed by pasting its address anywhere on the page: Charon reads it
+  and checks it against your rules before you subscribe. An unread badge sits on the nav.
 - **Rules:** drag to reorder priorities, toggle rules on and off, and edit them with a step
   builder, a folder browser limited to `CHARON_RULE_ROOTS`, and a test bench that runs your
   unsaved draft on the server as you type.
@@ -214,13 +308,20 @@ Needs Node 22.22.2+, 24.15+ or 26+ (the Docker build uses Node 24). No NAS or Do
 ```bash
 make ui-install
 make ui-dev          # fake Download Station + Charon + UI on http://localhost:5173 (key: dev-key)
-make ui-seed         # in another shell: sample rules, downloads in every state, and keys
+make ui-seed         # in another shell: sample rules, downloads in every state, keys, and feeds
 ```
 
 `make ui-dev` slows fake downloads to 90 s (`FAKE_DS_DURATION_SECONDS`) so progress is
 visible, and accepts the same `CHARON_PORT` / `FAKE_DS_PORT` overrides as `make dev` (pass
 them to `make ui-seed` too). In dev builds a **Simulator** button steers the fake: finish or
-fail a task, expire sessions, reset. It is compiled out of production builds.
+fail a task, expire sessions, reset, and publish to, break or heal its feeds (then Charon
+refreshes, so the inbox shows the change at once). It is compiled out of production builds.
+
+`make ui-seed` subscribes Charon to the fake's two feeds (`/feeds/tv.xml`, `/feeds/anime.xml`),
+whose items cover every case: each sample rule, no rule, no date, a `.torrent` link that is
+skipped, the same torrent in both feeds, one already in Charon and one downloaded. It then
+marks everything seen and publishes one new item to each, so the inbox opens with something
+new.
 
 | Command | Purpose |
 |---|---|
@@ -284,7 +385,12 @@ Test-only control endpoints:
 | `POST /_control/tasks/{id}/complete` | Finish a task now |
 | `POST /_control/tasks/{id}/fail` `{detail}` | Fail a task |
 | `POST /_control/sessions/expire` | Invalidate sessions (tests re-login) |
-| `POST /_control/reset` | Clear all tasks and sessions |
+| `POST /_control/reset` | Clear all tasks and sessions, and restore the sample feeds |
+| `GET /feeds/{tv,anime}.xml` | Sample RSS feeds of magnet links, dated relative to when the fake started (honours `If-None-Match`) |
+| `GET /_control/feeds` | List the fake feeds and their items |
+| `POST /_control/feeds/{slug}/publish` `{name?}` | Add an item dated now |
+| `POST /_control/feeds/{slug}/break` `{mode}` | Make the feed answer `503` (`http_error`) or HTML (`bad_xml`) |
+| `POST /_control/feeds/{slug}/heal` | Serve the feed normally again |
 
 Three ways to stand it up:
 
@@ -310,9 +416,11 @@ Generated and test-only code is left out: the OpenAPI types (`schema.d.ts`), tes
 ```
 charon/
   domain/     models and pure rename/match logic
-  ports/      interfaces: Downloader, JobStore, RuleStore, ApiKeyStore, FileOps, Clock
-  services/   DownloadService, RuleService, ApiKeyService, DestinationService, PostProcessor, Watcher
-  adapters/   download_station/, sqlite/, local_fs.py
+  ports/      interfaces: Downloader, FeedFetcher, EventLog, stores, FileOps, Clock
+  services/   DownloadService, RuleService, ApiKeyService, DestinationService, PostProcessor,
+              Watcher, FeedService, FeedInbox, FeedRefresher, AutoDownloader, EventService,
+              IdempotencyService, Housekeeper
+  adapters/   download_station/, sqlite/ (with migrations.py), http_feed_fetcher.py, local_fs.py
   api/        FastAPI routers, schemas, auth, error mapping
   bootstrap.py  composition root: the only module that knows concrete adapters
 fake_ds/      fake Download Station, plus `python -m fake_ds.seed` for sample data
@@ -325,7 +433,13 @@ tests/e2e     scripted API flows against Charon + fake Download Station
 Services depend only on ports; `bootstrap.py` wires the adapters in. A background watcher
 polls the downloader every `CHARON_POLL_INTERVAL_SECONDS`, updates jobs, and runs
 post-processing for completed ones. Job updates are compare-and-set on status, so the
-watcher and API calls (e.g. cancel) cannot overwrite each other.
+watcher and API calls (e.g. cancel) cannot overwrite each other. A feed poller looks for
+feeds due a refresh every `CHARON_FEED_POLL_INTERVAL_SECONDS`, and a housekeeper prunes old
+events, idempotency keys and feed items hourly.
+
+The SQLite schema is versioned with `PRAGMA user_version`: `adapters/sqlite/migrations.py`
+lists the changes since the first release, and an existing database picks up the ones it is
+missing when Charon starts.
 
 ### Adding another downloader (e.g. Transmission)
 

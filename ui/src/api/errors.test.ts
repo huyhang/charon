@@ -1,4 +1,4 @@
-import { ApiError, errorMessage, isApiError } from "./errors";
+import { ApiError, errorHintOf, errorMessage, isApiError } from "./errors";
 
 const validation = new ApiError(422, {
   code: "invalid_request",
@@ -26,5 +26,30 @@ describe("isApiError", () => {
     [new Error("x"), undefined, false],
   ])("case %#", (error, status, expected) => {
     expect(isApiError(error, status)).toBe(expected);
+  });
+});
+
+describe("hints", () => {
+  it.each<[unknown, string | null, boolean]>([
+    [
+      new ApiError(409, {
+        code: "rule_changed",
+        message: "x",
+        hint: "Reload it",
+        retryable: false,
+      }),
+      "Reload it",
+      false,
+    ],
+    [
+      new ApiError(502, { code: "downloader_unreachable", message: "x", retryable: true }),
+      null,
+      true,
+    ],
+    [conflict, null, false],
+    [new Error("x"), null, false],
+  ])("case %#", (error, hint, retryable) => {
+    expect(errorHintOf(error)).toBe(hint);
+    expect(isApiError(error) && error.retryable).toBe(isApiError(error) ? retryable : false);
   });
 });

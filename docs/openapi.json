@@ -1,6 +1,32 @@
 {
   "components": {
     "schemas": {
+      "Actor": {
+        "description": "Who made a change: whoever holds an API key, or Charon itself.",
+        "properties": {
+          "key_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null for Charon itself and the bootstrap key.",
+            "title": "Key Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "Actor",
+        "type": "object"
+      },
       "ApiKeyView": {
         "properties": {
           "created_at": {
@@ -82,6 +108,24 @@
         "title": "DestinationRootsView",
         "type": "object"
       },
+      "DownloadItemRequest": {
+        "properties": {
+          "rule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Force this rule.",
+            "title": "Rule Id"
+          }
+        },
+        "title": "DownloadItemRequest",
+        "type": "object"
+      },
       "DownloadSummaryView": {
         "properties": {
           "counts": {
@@ -143,9 +187,27 @@
             "description": "Field-level problems, for request validation errors.",
             "title": "Details"
           },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What to do about it, in plain language, when Charon knows.",
+            "title": "Hint"
+          },
           "message": {
             "title": "Message",
             "type": "string"
+          },
+          "retryable": {
+            "default": false,
+            "description": "Whether sending the same request again later may succeed.",
+            "title": "Retryable",
+            "type": "boolean"
           }
         },
         "required": [
@@ -162,6 +224,575 @@
         ],
         "title": "ErrorStage",
         "type": "string"
+      },
+      "EventListView": {
+        "properties": {
+          "cursor": {
+            "description": "Pass as `after` to get the events that happen next. Unchanged when nothing new matched.",
+            "title": "Cursor",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EventView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "cursor"
+        ],
+        "title": "EventListView",
+        "type": "object"
+      },
+      "EventType": {
+        "enum": [
+          "job.created",
+          "job.status_changed",
+          "rule.created",
+          "rule.updated",
+          "rule.deleted",
+          "rules.reordered",
+          "feed.created",
+          "feed.updated",
+          "feed.deleted",
+          "feed.health_changed",
+          "feed_item.added",
+          "feed_item.downloaded"
+        ],
+        "title": "EventType",
+        "type": "string"
+      },
+      "EventView": {
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/Actor"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "additionalProperties": true,
+            "title": "Data",
+            "type": "object"
+          },
+          "id": {
+            "description": "Increases with every event. Use the last one seen as `after`.",
+            "title": "Id",
+            "type": "integer"
+          },
+          "subject_id": {
+            "description": "The job, rule, feed or feed item it is about.",
+            "title": "Subject Id",
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/EventType"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "subject_id",
+          "actor",
+          "data",
+          "created_at"
+        ],
+        "title": "EventView",
+        "type": "object"
+      },
+      "FeedItemListView": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FeedItemView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "FeedItemListView",
+        "type": "object"
+      },
+      "FeedItemView": {
+        "properties": {
+          "auto_downloaded": {
+            "title": "Auto Downloaded",
+            "type": "boolean"
+          },
+          "auto_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why auto-download couldn't start it, if it tried.",
+            "title": "Auto Error"
+          },
+          "feeds": {
+            "description": "Every subscribed feed that lists it.",
+            "items": {
+              "$ref": "#/components/schemas/FeedRefView"
+            },
+            "title": "Feeds",
+            "type": "array"
+          },
+          "first_seen_at": {
+            "format": "date-time",
+            "title": "First Seen At",
+            "type": "string"
+          },
+          "info_hash": {
+            "title": "Info Hash",
+            "type": "string"
+          },
+          "job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItemJobView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The newest download of this torrent, however it was added."
+          },
+          "magnet": {
+            "title": "Magnet",
+            "type": "string"
+          },
+          "match": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItemMatchView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The rule that would file it, if any."
+          },
+          "match_error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProblemView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set when the matching rule can't be applied to this name."
+          },
+          "name": {
+            "description": "What rules match: the magnet's name, else the item's title.",
+            "title": "Name",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "published_estimated": {
+            "description": "True when the feed gave no date and published_at is when Charon first saw it.",
+            "title": "Published Estimated",
+            "type": "boolean"
+          },
+          "seen": {
+            "title": "Seen",
+            "type": "boolean"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "info_hash",
+          "name",
+          "title",
+          "magnet",
+          "size_bytes",
+          "published_at",
+          "published_estimated",
+          "first_seen_at",
+          "seen",
+          "feeds",
+          "match",
+          "match_error",
+          "job",
+          "auto_downloaded",
+          "auto_error"
+        ],
+        "title": "FeedItemView",
+        "type": "object"
+      },
+      "FeedPreviewRequest": {
+        "properties": {
+          "url": {
+            "maxLength": 2000,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "FeedPreviewRequest",
+        "type": "object"
+      },
+      "FeedPreviewView": {
+        "properties": {
+          "item_count": {
+            "description": "Items with a magnet link.",
+            "title": "Item Count",
+            "type": "integer"
+          },
+          "items": {
+            "description": "The newest few, checked against the rules.",
+            "items": {
+              "$ref": "#/components/schemas/FeedItemView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "newest_published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Newest Published At"
+          },
+          "skipped_count": {
+            "description": "Items without one, which Charon ignores.",
+            "title": "Skipped Count",
+            "type": "integer"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "title",
+          "item_count",
+          "skipped_count",
+          "newest_published_at",
+          "items"
+        ],
+        "title": "FeedPreviewView",
+        "type": "object"
+      },
+      "FeedRefView": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "FeedRefView",
+        "type": "object"
+      },
+      "FeedSpec": {
+        "description": "A feed as supplied by a client.",
+        "properties": {
+          "auto_download": {
+            "default": false,
+            "description": "Download items that match a rule, if they appear after this is turned on.",
+            "title": "Auto Download",
+            "type": "boolean"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "refresh_minutes": {
+            "default": 15,
+            "maximum": 1440.0,
+            "minimum": 5.0,
+            "title": "Refresh Minutes",
+            "type": "integer"
+          },
+          "url": {
+            "description": "The RSS address. It may hold a passkey, so Charon treats it as a secret.",
+            "maxLength": 2000,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url"
+        ],
+        "title": "FeedSpec",
+        "type": "object"
+      },
+      "FeedSummaryView": {
+        "properties": {
+          "feeds": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Unseen items per feed id.",
+            "title": "Feeds",
+            "type": "object"
+          },
+          "unread": {
+            "description": "Unseen items across every feed, each counted once.",
+            "title": "Unread",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "unread",
+          "feeds"
+        ],
+        "title": "FeedSummaryView",
+        "type": "object"
+      },
+      "FeedUpdate": {
+        "properties": {
+          "auto_download": {
+            "default": false,
+            "description": "Download items that match a rule, if they appear after this is turned on.",
+            "title": "Auto Download",
+            "type": "boolean"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "refresh_minutes": {
+            "default": 15,
+            "maximum": 1440.0,
+            "minimum": 5.0,
+            "title": "Refresh Minutes",
+            "type": "integer"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A new address (admins only); omit to keep it.",
+            "title": "Url"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "FeedUpdate",
+        "type": "object"
+      },
+      "FeedUrlView": {
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "FeedUrlView",
+        "type": "object"
+      },
+      "FeedView": {
+        "properties": {
+          "auto_download": {
+            "title": "Auto Download",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Actor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Checked At"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProblemView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null while the feed is healthy."
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "next_check_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null while the feed is disabled.",
+            "title": "Next Check At"
+          },
+          "refresh_minutes": {
+            "title": "Refresh Minutes",
+            "type": "integer"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The feed's own title, from its last fetch.",
+            "title": "Title"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Actor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "url": {
+            "description": "The address with passkeys and tokens masked. Admins can read it whole at GET /feeds/{id}/url.",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "url",
+          "enabled",
+          "refresh_minutes",
+          "auto_download",
+          "title",
+          "created_at",
+          "updated_at",
+          "created_by",
+          "updated_by",
+          "last_checked_at",
+          "next_check_at",
+          "last_error"
+        ],
+        "title": "FeedView",
+        "type": "object"
       },
       "FolderListingView": {
         "properties": {
@@ -290,11 +921,85 @@
         "title": "IssuedApiKeyView",
         "type": "object"
       },
-      "JobError": {
+      "ItemJobView": {
+        "properties": {
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "percent": {
+            "title": "Percent",
+            "type": "number"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "percent",
+          "error_code"
+        ],
+        "title": "ItemJobView",
+        "type": "object"
+      },
+      "ItemMatchView": {
+        "properties": {
+          "final_path": {
+            "title": "Final Path",
+            "type": "string"
+          },
+          "new_name": {
+            "title": "New Name",
+            "type": "string"
+          },
+          "rule_id": {
+            "title": "Rule Id",
+            "type": "string"
+          },
+          "rule_name": {
+            "title": "Rule Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule_id",
+          "rule_name",
+          "new_name",
+          "final_path"
+        ],
+        "title": "ItemMatchView",
+        "type": "object"
+      },
+      "JobErrorView": {
         "properties": {
           "code": {
             "title": "Code",
             "type": "string"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What to do about it, in plain language.",
+            "title": "Hint"
           },
           "message": {
             "title": "Message",
@@ -307,9 +1012,10 @@
         "required": [
           "stage",
           "code",
-          "message"
+          "message",
+          "hint"
         ],
-        "title": "JobError",
+        "title": "JobErrorView",
         "type": "object"
       },
       "JobListView": {
@@ -372,10 +1078,21 @@
             "title": "Created At",
             "type": "string"
           },
+          "created_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Actor"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who added it; null for jobs added before Charon recorded this."
+          },
           "error": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/JobError"
+                "$ref": "#/components/schemas/JobErrorView"
               },
               {
                 "type": "null"
@@ -385,6 +1102,18 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "info_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Lowercase hex; the same for every magnet of a torrent.",
+            "title": "Info Hash"
           },
           "magnet": {
             "title": "Magnet",
@@ -424,12 +1153,100 @@
           "progress",
           "processing",
           "error",
+          "info_hash",
+          "created_by",
           "created_at",
           "updated_at",
           "completed_at"
         ],
         "title": "JobView",
         "type": "object"
+      },
+      "MarkAllSeenRequest": {
+        "properties": {
+          "feed_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only this feed's items.",
+            "title": "Feed Id"
+          },
+          "match": {
+            "$ref": "#/components/schemas/MatchFilter",
+            "default": "all",
+            "description": "Only items in this view."
+          },
+          "q": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only names containing this.",
+            "title": "Q"
+          },
+          "up_to": {
+            "description": "Only items Charon first saw at or before this time, e.g. when the list was loaded, so items that arrived since stay new.",
+            "format": "date-time",
+            "title": "Up To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "up_to"
+        ],
+        "title": "MarkAllSeenRequest",
+        "type": "object"
+      },
+      "MarkSeenRequest": {
+        "properties": {
+          "info_hashes": {
+            "description": "The items to mark seen, e.g. the ones a list showed.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Info Hashes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "info_hashes"
+        ],
+        "title": "MarkSeenRequest",
+        "type": "object"
+      },
+      "MarkSeenView": {
+        "properties": {
+          "marked": {
+            "title": "Marked",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "marked"
+        ],
+        "title": "MarkSeenView",
+        "type": "object"
+      },
+      "MatchFilter": {
+        "enum": [
+          "all",
+          "matched",
+          "unmatched"
+        ],
+        "title": "MatchFilter",
+        "type": "string"
       },
       "MatchType": {
         "enum": [
@@ -550,6 +1367,37 @@
         "title": "PrincipalView",
         "type": "object"
       },
+      "ProblemView": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What to do about it, in plain language.",
+            "title": "Hint"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "hint"
+        ],
+        "title": "ProblemView",
+        "type": "object"
+      },
       "ProcessingView": {
         "properties": {
           "final_path": {
@@ -662,6 +1510,23 @@
         "title": "RenameStep",
         "type": "object"
       },
+      "ReorderRulesRequest": {
+        "properties": {
+          "ids": {
+            "description": "Every rule's id, in the new order, highest priority first.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "title": "ReorderRulesRequest",
+        "type": "object"
+      },
       "Role": {
         "enum": [
           "admin",
@@ -675,6 +1540,23 @@
           "created_at": {
             "format": "date-time",
             "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Actor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "default": "",
+            "description": "Why the rule exists, in plain words.",
+            "maxLength": 500,
+            "title": "Description",
             "type": "string"
           },
           "destination": {
@@ -715,6 +1597,22 @@
             },
             "title": "Steps",
             "type": "array"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Actor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "default": 1,
+            "description": "Goes up by one on every change.",
+            "title": "Version",
+            "type": "integer"
           }
         },
         "required": [
@@ -730,6 +1628,13 @@
       "RuleSpec": {
         "description": "A rule as supplied by a client, before it has an identity.",
         "properties": {
+          "description": {
+            "default": "",
+            "description": "Why the rule exists, in plain words.",
+            "maxLength": 500,
+            "title": "Description",
+            "type": "string"
+          },
           "destination": {
             "title": "Destination",
             "type": "string"
@@ -772,6 +1677,71 @@
           "destination"
         ],
         "title": "RuleSpec",
+        "type": "object"
+      },
+      "RuleUpdate": {
+        "properties": {
+          "description": {
+            "default": "",
+            "description": "Why the rule exists, in plain words.",
+            "maxLength": 500,
+            "title": "Description",
+            "type": "string"
+          },
+          "destination": {
+            "title": "Destination",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "match_type": {
+            "$ref": "#/components/schemas/MatchType",
+            "default": "glob"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "pattern": {
+            "minLength": 1,
+            "title": "Pattern",
+            "type": "string"
+          },
+          "priority": {
+            "default": 100,
+            "title": "Priority",
+            "type": "integer"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/RenameStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The version you loaded. If the rule has changed since, the save fails with 409 rule_changed instead of overwriting that change. Omit to overwrite.",
+            "title": "Version"
+          }
+        },
+        "required": [
+          "name",
+          "pattern",
+          "destination"
+        ],
+        "title": "RuleUpdate",
         "type": "object"
       },
       "SubmitDownloadRequest": {
@@ -1379,7 +2349,29 @@
         ]
       },
       "post": {
+        "description": "Start downloading a magnet.\n\nAnswers 202 with a new job, or 200 with the existing job when the same torrent (same info\nhash) is already in Charon and not cancelled, or when `Idempotency-Key` repeats a request.",
         "operationId": "submitDownload",
+        "parameters": [
+          {
+            "description": "Any unique string, e.g. a UUID. Repeating a request with the same key returns what the first one created (with status 200) instead of creating it again. Keys belong to the API key that sent them and are remembered for a day.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Any unique string, e.g. a UUID. Repeating a request with the same key returns what the first one created (with status 200) instead of creating it again. Keys belong to the API key that sent them and are remembered for a day.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1391,6 +2383,16 @@
           "required": true
         },
         "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            },
+            "description": "Already in Charon"
+          },
           "202": {
             "content": {
               "application/json": {
@@ -1410,6 +2412,16 @@
               }
             },
             "description": "Missing, invalid or revoked API key"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflicts with the resource's current state"
           },
           "422": {
             "content": {
@@ -1719,6 +2731,1172 @@
         ]
       }
     },
+    "/api/v1/events": {
+      "get": {
+        "description": "What happened since `after`, oldest first: job status changes, rule edits, feed items\u2026\n\nPoll with the returned `cursor` to follow along. Events are kept for 30 days.",
+        "operationId": "listEvents",
+        "parameters": [
+          {
+            "description": "The `cursor` from the previous call.",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "description": "The `cursor` from the previous call.",
+              "minimum": 0,
+              "title": "After",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Only these types.",
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/EventType"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these types.",
+              "title": "Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventListView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "List Events",
+        "tags": [
+          "events"
+        ]
+      }
+    },
+    "/api/v1/feeds": {
+      "get": {
+        "operationId": "listFeeds",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FeedView"
+                  },
+                  "title": "Response Listfeeds",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "List Feeds",
+        "tags": [
+          "feeds"
+        ]
+      },
+      "post": {
+        "description": "Subscribe, and fetch the feed once right away.\n\nA feed that can't be fetched is still added, with `last_error` saying why.",
+        "operationId": "createFeed",
+        "parameters": [
+          {
+            "description": "Any unique string, e.g. a UUID. Repeating a request with the same key returns what the first one created (with status 200) instead of creating it again. Keys belong to the API key that sent them and are remembered for a day.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Any unique string, e.g. a UUID. Repeating a request with the same key returns what the first one created (with status 200) instead of creating it again. Keys belong to the API key that sent them and are remembered for a day.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedSpec"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedView"
+                }
+              }
+            },
+            "description": "Repeated request"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflicts with the resource's current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Create Feed",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
+    "/api/v1/feeds/items": {
+      "get": {
+        "description": "Items from every feed, newest published first, each checked against the current rules.",
+        "operationId": "listFeedItems",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "feed_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Feed Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "match",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/MatchFilter",
+              "default": "all"
+            }
+          },
+          {
+            "description": "Only items nobody has seen yet.",
+            "in": "query",
+            "name": "unseen",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only items nobody has seen yet.",
+              "title": "Unseen",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Text the name contains.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Text the name contains.",
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedItemListView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "List Feed Items",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
+    "/api/v1/feeds/items/seen": {
+      "post": {
+        "description": "Mark exactly these items seen, e.g. the ones a list showed. Unknown ones are ignored.",
+        "operationId": "markFeedItemsSeen",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkSeenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkSeenView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Mark Feed Items Seen",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
+    "/api/v1/feeds/items/seen-all": {
+      "post": {
+        "description": "Mark every unseen item in a view seen (\"Mark all seen\"), up to `up_to`.\n\nThe view's `feed_id`, `match` and `q` apply, so items it hides stay new.",
+        "operationId": "markAllFeedItemsSeen",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkAllSeenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkSeenView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Mark All Feed Items Seen",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
+    "/api/v1/feeds/items/{info_hash}": {
+      "get": {
+        "operationId": "getFeedItem",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "info_hash",
+            "required": true,
+            "schema": {
+              "title": "Info Hash",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedItemView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Get Feed Item",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
+    "/api/v1/feeds/items/{info_hash}/download": {
+      "post": {
+        "description": "Download an item. Answers 200 with the existing job if the torrent is already in Charon.",
+        "operationId": "downloadFeedItem",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "info_hash",
+            "required": true,
+            "schema": {
+              "title": "Info Hash",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DownloadItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            },
+            "description": "Already in Charon"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The download backend failed or is unreachable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Download Feed Item",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
+    "/api/v1/feeds/preview": {
+      "post": {
+        "description": "Fetch and read a feed without subscribing: its title, counts and newest items.",
+        "operationId": "previewFeed",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedPreviewView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Preview Feed",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
+    "/api/v1/feeds/refresh": {
+      "post": {
+        "description": "Fetch every enabled feed now; paused ones are skipped. Problems go in `last_error`.",
+        "operationId": "refreshAllFeeds",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FeedView"
+                  },
+                  "title": "Response Refreshallfeeds",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Refresh All Feeds",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
+    "/api/v1/feeds/summary": {
+      "get": {
+        "description": "How many items nobody has seen yet, in total and per feed.",
+        "operationId": "summarizeFeeds",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedSummaryView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Summarize Feeds",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
+    "/api/v1/feeds/{feed_id}": {
+      "delete": {
+        "description": "Unsubscribe. Items only this feed listed are forgotten; downloads are untouched.",
+        "operationId": "deleteFeed",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "feed_id",
+            "required": true,
+            "schema": {
+              "title": "Feed Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Delete Feed",
+        "tags": [
+          "feeds"
+        ]
+      },
+      "get": {
+        "operationId": "getFeed",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "feed_id",
+            "required": true,
+            "schema": {
+              "title": "Feed Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Get Feed",
+        "tags": [
+          "feeds"
+        ]
+      },
+      "put": {
+        "description": "Change a feed's settings. Changing its address (`url`) takes an admin key.",
+        "operationId": "updateFeed",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "feed_id",
+            "required": true,
+            "schema": {
+              "title": "Feed Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The key's role does not allow this action"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Update Feed",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
+    "/api/v1/feeds/{feed_id}/refresh": {
+      "post": {
+        "description": "Fetch the feed now. Problems are reported in `last_error`, not as an error response.",
+        "operationId": "refreshFeed",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "feed_id",
+            "required": true,
+            "schema": {
+              "title": "Feed Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Refresh Feed",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
+    "/api/v1/feeds/{feed_id}/url": {
+      "get": {
+        "description": "The feed's whole address, passkey included. Admins only.",
+        "operationId": "revealFeedUrl",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "feed_id",
+            "required": true,
+            "schema": {
+              "title": "Feed Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedUrlView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The key's role does not allow this action"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Reveal Feed Url",
+        "tags": [
+          "feeds"
+        ]
+      }
+    },
     "/api/v1/health": {
       "get": {
         "operationId": "getHealth",
@@ -1742,6 +3920,7 @@
     },
     "/api/v1/rules": {
       "get": {
+        "description": "Every rule, in the order they are tried.",
         "operationId": "listRules",
         "responses": {
           "200": {
@@ -1791,6 +3970,27 @@
       },
       "post": {
         "operationId": "createRule",
+        "parameters": [
+          {
+            "description": "Any unique string, e.g. a UUID. Repeating a request with the same key returns what the first one created (with status 200) instead of creating it again. Keys belong to the API key that sent them and are remembered for a day.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Any unique string, e.g. a UUID. Repeating a request with the same key returns what the first one created (with status 200) instead of creating it again. Keys belong to the API key that sent them and are remembered for a day.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1802,6 +4002,16 @@
           "required": true
         },
         "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rule"
+                }
+              }
+            },
+            "description": "Repeated request"
+          },
           "201": {
             "content": {
               "application/json": {
@@ -1821,6 +4031,16 @@
               }
             },
             "description": "Missing, invalid or revoked API key"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflicts with the resource's current state"
           },
           "422": {
             "content": {
@@ -1906,6 +4126,77 @@
           }
         ],
         "summary": "Preview Rule",
+        "tags": [
+          "rules"
+        ]
+      }
+    },
+    "/api/v1/rules/reorder": {
+      "post": {
+        "description": "Put every rule in a new order at once; priorities are re-spaced 10, 20, 30\u2026\n\nFails with 409 rules_changed if `ids` isn't exactly the current set of rules.",
+        "operationId": "reorderRules",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderRulesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Rule"
+                  },
+                  "title": "Response Reorderrules",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflicts with the resource's current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Reorder Rules",
         "tags": [
           "rules"
         ]
@@ -2036,6 +4327,7 @@
         ]
       },
       "put": {
+        "description": "Replace a rule. Send the `version` you loaded (or If-Match) to refuse a newer edit.",
         "operationId": "updateRule",
         "parameters": [
           {
@@ -2046,13 +4338,31 @@
               "title": "Rule Id",
               "type": "string"
             }
+          },
+          {
+            "description": "The rule's ETag, e.g. \"3\": an alternative to sending `version`.",
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The rule's ETag, e.g. \"3\": an alternative to sending `version`.",
+              "title": "If-Match"
+            }
           }
         ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RuleSpec"
+                "$ref": "#/components/schemas/RuleUpdate"
               }
             }
           },
@@ -2088,6 +4398,16 @@
               }
             },
             "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflicts with the resource's current state"
           },
           "422": {
             "content": {

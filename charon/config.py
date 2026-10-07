@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     db_path: Path = Path("/data/charon.db")
     download_dir: Path = Path("/downloads")
     poll_interval_seconds: float = 10.0
+    # How often to look for feeds due a refresh; each feed has its own refresh interval.
+    feed_poll_interval_seconds: float = 60.0
+    feed_timeout_seconds: float = 20.0
+    feed_max_bytes: int = 5 * 1024 * 1024
 
     downloader: Literal["download_station"] = "download_station"
     ds_url: str = "http://localhost:5000"

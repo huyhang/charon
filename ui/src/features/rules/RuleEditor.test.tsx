@@ -33,6 +33,7 @@ describe("RuleEditor", () => {
     await waitFor(() =>
       expect(client.createRule).toHaveBeenCalledWith({
         name: "TV",
+        description: "",
         priority: 10,
         enabled: true,
         match_type: "glob",
@@ -156,7 +157,9 @@ describe("RuleEditor", () => {
 
   it("edits an existing rule in place", async () => {
     const rule = makeRule({ id: "r1", name: "Old" });
-    const client = createFakeClient({ updateRule: async (_, spec) => ({ ...rule, ...spec }) });
+    const client = createFakeClient({
+      updateRule: async (_, spec) => ({ ...rule, ...spec, version: rule.version + 1 }),
+    });
     await renderWithApp(<RuleEditor target={{ mode: "edit", rule }} onClose={() => {}} />, {
       client,
     });
@@ -167,7 +170,44 @@ describe("RuleEditor", () => {
     await waitFor(() =>
       expect(client.updateRule).toHaveBeenCalledWith(
         "r1",
-        expect.objectContaining({ name: "New" }),
+        expect.objectContaining({ name: "New", version: 1 }),
+      ),
+    );
+  });
+
+  it("says what to do when someone else changed the rule meanwhile", async () => {
+    const rule = makeRule({ id: "r1", name: "Old", version: 3 });
+    const client = createFakeClient({
+      updateRule: async () => {
+        throw new ApiError(409, {
+          code: "rule_changed",
+          message: "rule r1 changed since you loaded it",
+          hint: "Load the rule again.",
+        });
+      },
+    });
+    const onClose = vi.fn();
+    await renderWithApp(<RuleEditor target={{ mode: "edit", rule }} onClose={onClose} />, {
+      client,
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Save rule" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "rule r1 changed since you loaded it Load the rule again.",
+    );
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("saves a description of why the rule exists", async () => {
+    const client = createFakeClient({
+      createRule: async (spec) => makeRule({ ...spec, id: "new" }),
+    });
+    await renderWithApp(<RuleEditor target={CREATE} onClose={() => {}} />, { client });
+    await fillBasics();
+    await userEvent.type(screen.getByLabelText("Description"), "Keeps TV tidy");
+    await userEvent.click(screen.getByRole("button", { name: "Create rule" }));
+    await waitFor(() =>
+      expect(client.createRule).toHaveBeenCalledWith(
+        expect.objectContaining({ description: "Keeps TV tidy" }),
       ),
     );
   });

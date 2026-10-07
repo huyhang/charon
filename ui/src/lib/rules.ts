@@ -1,4 +1,4 @@
-import type { Rule, RuleSpec } from "@/api/types";
+import type { Rule, RuleSpec, RuleUpdate } from "@/api/types";
 
 export const PRIORITY_STEP = 10;
 
@@ -10,30 +10,33 @@ export function moveItem<T>(items: readonly T[], from: number, to: number): T[] 
   return next;
 }
 
-export interface PriorityChange {
-  rule: Rule;
-  priority: number;
-}
-
-/** Evenly spaced priorities for `ordered`, returning only the rules that change. */
-export function priorityChanges(ordered: readonly Rule[]): PriorityChange[] {
-  return ordered
-    .map((rule, index) => ({ rule, priority: (index + 1) * PRIORITY_STEP }))
-    .filter(({ rule, priority }) => rule.priority !== priority);
-}
-
 export function nextPriority(rules: readonly Rule[]): number {
   return rules.reduce((max, rule) => Math.max(max, rule.priority), 0) + PRIORITY_STEP;
 }
 
 export function toSpec(rule: Rule): RuleSpec {
-  const { name, priority, enabled, match_type, pattern, steps, destination } = rule;
-  return { name, priority, enabled, match_type, pattern, steps: steps ?? [], destination };
+  const { name, description, priority, enabled, match_type, pattern, steps, destination } = rule;
+  return {
+    name,
+    description: description ?? "",
+    priority,
+    enabled,
+    match_type,
+    pattern,
+    steps: steps ?? [],
+    destination,
+  };
+}
+
+/** The rule as an update that fails, rather than overwrites, if someone changed it meanwhile. */
+export function toUpdate(rule: Rule, patch: Partial<RuleSpec> = {}): RuleUpdate {
+  return { ...toSpec(rule), ...patch, version: rule.version };
 }
 
 export function emptySpec(priority: number, destination = ""): RuleSpec {
   return {
     name: "",
+    description: "",
     priority,
     enabled: true,
     match_type: "glob",

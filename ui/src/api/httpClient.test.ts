@@ -36,12 +36,21 @@ function client(key: string | null = "secret", status = 200, body: unknown = {})
 
 const SPEC = {
   name: "tv",
+  description: "",
   priority: 10,
   enabled: true,
   match_type: "glob" as const,
   pattern: "*",
   steps: [],
   destination: "/tv",
+};
+
+const FEED = {
+  name: "TV",
+  url: "https://t.example/rss",
+  enabled: true,
+  refresh_minutes: 15,
+  auto_download: false,
 };
 
 describe("createHttpClient requests", () => {
@@ -100,8 +109,124 @@ describe("createHttpClient requests", () => {
       ],
       [
         "updateRule",
-        (api) => api.updateRule("r1", SPEC),
-        { method: "PUT", url: "/api/v1/rules/r1", body: SPEC },
+        (api) => api.updateRule("r1", { ...SPEC, version: 3 }),
+        { method: "PUT", url: "/api/v1/rules/r1", body: { ...SPEC, version: 3 } },
+      ],
+      [
+        "reorderRules",
+        (api) => api.reorderRules(["b", "a"]),
+        { method: "POST", url: "/api/v1/rules/reorder", body: { ids: ["b", "a"] } },
+      ],
+      [
+        "listFeeds",
+        (api) => api.listFeeds(),
+        { method: "GET", url: "/api/v1/feeds", body: undefined },
+      ],
+      [
+        "createFeed",
+        (api) => api.createFeed(FEED),
+        { method: "POST", url: "/api/v1/feeds", body: FEED },
+      ],
+      [
+        "updateFeed",
+        (api) => api.updateFeed("f1", { ...FEED, url: null }),
+        { method: "PUT", url: "/api/v1/feeds/f1", body: { ...FEED, url: null } },
+      ],
+      [
+        "deleteFeed",
+        (api) => api.deleteFeed("f1"),
+        { method: "DELETE", url: "/api/v1/feeds/f1", body: undefined },
+      ],
+      [
+        "refreshFeed",
+        (api) => api.refreshFeed("f1"),
+        { method: "POST", url: "/api/v1/feeds/f1/refresh", body: undefined },
+      ],
+      [
+        "revealFeedUrl",
+        (api) => api.revealFeedUrl("f1"),
+        { method: "GET", url: "/api/v1/feeds/f1/url", body: undefined },
+      ],
+      [
+        "previewFeed",
+        (api) => api.previewFeed("https://t.example/rss"),
+        { method: "POST", url: "/api/v1/feeds/preview", body: { url: "https://t.example/rss" } },
+      ],
+      [
+        "listFeedItems",
+        (api) =>
+          api.listFeedItems({
+            feedId: "f1",
+            match: "matched",
+            unseen: true,
+            q: "show",
+            limit: 50,
+            cursor: "c",
+          }),
+        {
+          method: "GET",
+          url: "/api/v1/feeds/items?feed_id=f1&match=matched&unseen=true&q=show&limit=50&cursor=c",
+          body: undefined,
+        },
+      ],
+      [
+        "listFeedItems with defaults",
+        (api) => api.listFeedItems({ q: "" }),
+        { method: "GET", url: "/api/v1/feeds/items", body: undefined },
+      ],
+      [
+        "getFeedItem",
+        (api) => api.getFeedItem("abc"),
+        { method: "GET", url: "/api/v1/feeds/items/abc", body: undefined },
+      ],
+      [
+        "feedSummary",
+        (api) => api.feedSummary(),
+        { method: "GET", url: "/api/v1/feeds/summary", body: undefined },
+      ],
+      [
+        "markFeedItemsSeen",
+        (api) => api.markFeedItemsSeen(["h1", "h2"]),
+        { method: "POST", url: "/api/v1/feeds/items/seen", body: { info_hashes: ["h1", "h2"] } },
+      ],
+      [
+        "markAllFeedItemsSeen in a view",
+        (api) =>
+          api.markAllFeedItemsSeen({
+            upTo: "2026-10-01T12:00:00Z",
+            feedId: "f1",
+            match: "matched",
+            q: "show",
+          }),
+        {
+          method: "POST",
+          url: "/api/v1/feeds/items/seen-all",
+          body: { up_to: "2026-10-01T12:00:00Z", feed_id: "f1", match: "matched", q: "show" },
+        },
+      ],
+      [
+        "markAllFeedItemsSeen everywhere",
+        (api) => api.markAllFeedItemsSeen({ upTo: "2026-10-01T12:00:00Z" }),
+        {
+          method: "POST",
+          url: "/api/v1/feeds/items/seen-all",
+          body: { up_to: "2026-10-01T12:00:00Z", feed_id: null, match: "all", q: null },
+        },
+      ],
+      [
+        "refreshAllFeeds",
+        (api) => api.refreshAllFeeds(),
+        { method: "POST", url: "/api/v1/feeds/refresh", body: undefined },
+      ],
+      [
+        "downloadFeedItem",
+        (api) => api.downloadFeedItem("abc", "r1"),
+        { method: "POST", url: "/api/v1/feeds/items/abc/download", body: { rule_id: "r1" } },
+      ],
+      [
+        "downloadFeedItem without a rule",
+        (api) => api.downloadFeedItem("abc"),
+        { method: "POST", url: "/api/v1/feeds/items/abc/download", body: { rule_id: null } },
       ],
       [
         "previewRule",
@@ -144,6 +269,56 @@ describe("createHttpClient responses", () => {
   it("unwraps destination roots", async () => {
     const { api } = client("k", 200, { roots: ["/library"] });
     await expect(api.destinationRoots()).resolves.toEqual(["/library"]);
+  });
+
+  it.each([
+    [202, true],
+    [200, false],
+  ])("a download answered %i was created: %s", async (status, created) => {
+    const job = { id: "j1" };
+    const { api } = client("k", status, job);
+    await expect(api.submitDownload("magnet:?xt=x")).resolves.toEqual({ job, created });
+    await expect(api.downloadFeedItem("abc")).resolves.toEqual({ job, created });
+  });
+
+  it.each([
+    [
+      "revealFeedUrl",
+      { url: "https://t.example/rss?passkey=x" },
+      "https://t.example/rss?passkey=x",
+    ],
+    ["markFeedItemsSeen", { marked: 3 }, 3],
+    ["markAllFeedItemsSeen", { marked: 4 }, 4],
+  ] as const)("unwraps %s", async (method, body, expected) => {
+    const { api } = client("k", 200, body);
+    const calls = {
+      revealFeedUrl: () => api.revealFeedUrl("f1"),
+      markFeedItemsSeen: () => api.markFeedItemsSeen(["h1"]),
+      markAllFeedItemsSeen: () => api.markAllFeedItemsSeen({ upTo: "t" }),
+    };
+    await expect(calls[method]()).resolves.toEqual(expected);
+  });
+
+  it("marks items seen with keepalive, so the request outlives a closing page", async () => {
+    let keepalive: boolean | undefined;
+    const fetch = (async (request: Request) => {
+      keepalive = request.keepalive;
+      return new Response(JSON.stringify({ marked: 1 }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof globalThis.fetch;
+    const api = createHttpClient({ baseUrl: "http://charon", getKey: () => "k", fetch });
+    await api.markFeedItemsSeen(["h1"]);
+    expect(keepalive).toBe(true);
+  });
+
+  it("keeps hints and retryability from error bodies", async () => {
+    const body = {
+      error: { code: "feed_unreachable", message: "m", hint: "Check it", retryable: true },
+    };
+    const { api } = client("k", 422, body);
+    const error = (await api.previewFeed("x").catch((e: unknown) => e)) as ApiError;
+    expect([error.hint, error.retryable]).toEqual(["Check it", true]);
   });
 
   it("resolves deleteRule on 204", async () => {

@@ -22,7 +22,7 @@ describe("Timeline", () => {
     ["failed", "processing", null],
     ["cancelled", undefined, null],
   ])("%s (%s) marks %s as the current step", (status, stage, expected) => {
-    const error = stage ? { stage, code: "x", message: "x" } : null;
+    const error = stage ? { stage, code: "x", message: "x", hint: null } : null;
     render(<Timeline job={{ status, error }} />);
     expect(screen.getByRole("list", { name: "Progress" })).toBeInTheDocument();
     expect(screen.getAllByRole("listitem").map((item) => item.textContent)).toEqual(LABELS);

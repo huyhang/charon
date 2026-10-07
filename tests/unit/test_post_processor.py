@@ -15,6 +15,7 @@ from tests.unit.fakes import (
     FakeFileOps,
     InMemoryJobStore,
     InMemoryRuleStore,
+    RecordingEventLog,
     make_job,
     make_rule,
 )
@@ -35,13 +36,15 @@ class Harness:
         self.jobs = InMemoryJobStore([job])
         self.downloader = FakeDownloader()
         self.files = FakeFileOps(existing)
+        self.events = RecordingEventLog()
         self.processor = PostProcessor(
             self.jobs,
-            RuleService(InMemoryRuleStore(rules), ALLOW_ALL),
+            RuleService(InMemoryRuleStore(rules), ALLOW_ALL, RecordingEventLog()),
             self.downloader,
             self.files,
             PurePosixPath("/downloads"),
             policy,
+            self.events,
             clock=FakeClock(),
         )
 
@@ -60,6 +63,22 @@ def test_moves_renamed_item_and_removes_backend_task() -> None:
     assert h.files.moves == [(PurePosixPath(SOURCE), PurePosixPath(TARGET))]
     assert h.downloader.removed == ["task-1"]
     assert h.jobs.jobs["job-1"] == job
+
+
+@pytest.mark.parametrize(
+    ("existing", "statuses"),
+    [
+        ((SOURCE,), [JobStatus.PROCESSING, JobStatus.DONE]),
+        ((), [JobStatus.PROCESSING, JobStatus.FAILED]),
+    ],
+    ids=["filed", "source-missing"],
+)
+def test_records_each_status_change(existing: tuple, statuses: list) -> None:
+    h = Harness(completed_job(), existing=existing)
+    h.run()
+    assert [(e.data["previous"], e.data["status"]) for e in h.events.recorded] == list(
+        zip([JobStatus.COMPLETED, *statuses], statuses, strict=False)
+    )
 
 
 def test_no_matching_rule_leaves_item_in_place() -> None:
@@ -198,11 +217,14 @@ def test_symlink_at_final_path_is_never_followed_out_of_the_roots(tmp_path, targ
     jobs = InMemoryJobStore([completed_job()])
     processor = PostProcessor(
         jobs,
-        RuleService(InMemoryRuleStore([make_rule(destination=str(library))]), policy),
+        RuleService(
+            InMemoryRuleStore([make_rule(destination=str(library))]), policy, RecordingEventLog()
+        ),
         FakeDownloader(),
         LocalFileOps(),
         PurePosixPath(downloads),
         policy,
+        RecordingEventLog(),
     )
     job = processor.process(jobs.jobs["job-1"])
     assert (job.status, job.error.code) == (JobStatus.FAILED, "destination_exists")

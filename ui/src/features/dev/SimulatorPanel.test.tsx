@@ -2,9 +2,11 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { queryKeys } from "@/api/queries";
 import { Toaster } from "@/components/ui/sonner";
+import { createFakeClient, type FakeClient } from "@/test/fakeClient";
+import { makeFeed } from "@/test/factories";
 import { renderWithApp } from "@/test/render";
 import SimulatorPanel from "./SimulatorPanel";
-import type { FakeTask, SimulatorClient } from "./simulatorClient";
+import type { FakeFeed, FakeTask, SimulatorClient } from "./simulatorClient";
 
 function task(id: string, title: string, status: string, downloaded = "0"): FakeTask {
   return {
@@ -30,16 +32,21 @@ function fakeSimulator(overrides: Partial<SimulatorClient> = {}) {
     fail: vi.fn(async () => {}),
     expireSessions: vi.fn(async () => {}),
     reset: vi.fn(async () => {}),
+    listFeeds: vi.fn(async (): Promise<FakeFeed[]> => []),
+    publish: vi.fn(async () => {}),
+    breakFeed: vi.fn(async () => {}),
+    healFeed: vi.fn(async () => {}),
     ...overrides,
   };
 }
 
-async function openPanel(simulator?: SimulatorClient) {
+async function openPanel(simulator?: SimulatorClient, client?: FakeClient) {
   const result = await renderWithApp(
     <>
       <SimulatorPanel simulator={simulator} />
       <Toaster />
     </>,
+    { client },
   );
   await userEvent.click(screen.getByRole("button", { name: "Simulator" }));
   return { ...result, panel: await screen.findByRole("dialog") };
@@ -129,6 +136,75 @@ describe("SimulatorPanel", () => {
   ])("explains %s", async (_label, overrides, text) => {
     const { panel } = await openPanel(fakeSimulator(overrides));
     expect(await within(panel).findByText(text)).toBeInTheDocument();
+  });
+
+  describe("fake feeds", () => {
+    const FEEDS: FakeFeed[] = [
+      { slug: "tv", title: "Fake Tracker · TV", path: "/feeds/tv.xml", mode: "ok", items: [] },
+      {
+        slug: "anime",
+        title: "Fake Tracker · Anime",
+        path: "/feeds/anime.xml",
+        mode: "http_error",
+        items: [],
+      },
+    ];
+    const subscribed = () =>
+      createFakeClient({
+        listFeeds: async () => [makeFeed({ id: "a" }), makeFeed({ id: "b" })],
+        refreshFeed: async (id) => makeFeed({ id }),
+      });
+    const feedRow = async (panel: HTMLElement, title: string) => {
+      const section = await within(panel).findByRole("region", { name: "Fake feeds" });
+      return within(section).getByText(title).closest("li") as HTMLElement;
+    };
+
+    it.each<[string, string, keyof SimulatorClient, unknown[], string]>([
+      ["Fake Tracker · TV", "Publish", "publish", ["tv"], "Published to Fake Tracker · TV"],
+      [
+        "Fake Tracker · TV",
+        "Fail (503)",
+        "breakFeed",
+        ["tv", "http_error"],
+        "Fake Tracker · TV now fails",
+      ],
+      [
+        "Fake Tracker · TV",
+        "Not RSS",
+        "breakFeed",
+        ["tv", "bad_xml"],
+        "Fake Tracker · TV now serves HTML",
+      ],
+      ["Fake Tracker · Anime", "Heal", "healFeed", ["anime"], "Fake Tracker · Anime healed"],
+    ])("%s: %s, then Charon refreshes its feeds", async (title, button, method, args, message) => {
+      const simulator = fakeSimulator({ listFeeds: vi.fn(async () => FEEDS) });
+      const client = subscribed();
+      const { panel } = await openPanel(simulator, client);
+      await userEvent.click(
+        within(await feedRow(panel, title)).getByRole("button", { name: button }),
+      );
+      expect(await findToast(message)).toHaveTextContent("Charon refreshed 2 feed(s)");
+      expect(simulator[method]).toHaveBeenCalledWith(...args);
+      expect(client.refreshFeed).toHaveBeenCalledTimes(2);
+    });
+
+    it("explains an action the fake refused", async () => {
+      const simulator = fakeSimulator({
+        listFeeds: vi.fn(async () => FEEDS),
+        publish: async () => Promise.reject(new Error("Fake answered 404")),
+      });
+      const { panel } = await openPanel(simulator, subscribed());
+      await userEvent.click(
+        within(await feedRow(panel, "Fake Tracker · TV")).getByRole("button", { name: "Publish" }),
+      );
+      expect(await findToast("Simulator action failed")).toHaveTextContent("Fake answered 404");
+    });
+
+    it("stays out of the way when the fake has no feeds", async () => {
+      const { panel } = await openPanel(fakeSimulator());
+      await within(panel).findByText("Show.S01E01.mkv");
+      expect(within(panel).queryByRole("region", { name: "Fake feeds" })).not.toBeInTheDocument();
+    });
   });
 
   it("talks to the fake through the dev server by default", async () => {

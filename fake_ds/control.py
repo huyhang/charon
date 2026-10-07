@@ -44,9 +44,11 @@ def expire_sessions(request: Request) -> None:
 
 @router.post("/reset", status_code=204)
 def reset(request: Request) -> None:
+    """Clear every task and session, and put the fake feeds back to their samples."""
     station = _station(request)
     station.simulator.reset()
     station.sessions.clear()
+    request.app.state.feeds.reset()
 
 
 def _require(task: Any) -> Any:

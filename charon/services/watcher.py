@@ -8,6 +8,7 @@ from datetime import datetime
 
 from charon.domain.models import (
     ACTIVE_STATUSES,
+    SYSTEM,
     ErrorStage,
     Job,
     JobError,
@@ -17,7 +18,9 @@ from charon.domain.models import (
 from charon.errors import DownloaderError
 from charon.ports.clock import Clock, utc_now
 from charon.ports.downloader import BackendStatus, BackendTask, Downloader
+from charon.ports.events import EventLog
 from charon.ports.stores import JobStore
+from charon.services.job_events import record_status_change
 from charon.services.post_processor import PostProcessor
 
 log = logging.getLogger(__name__)
@@ -35,11 +38,13 @@ class Watcher:
         jobs: JobStore,
         downloader: Downloader,
         processor: PostProcessor,
+        events: EventLog,
         clock: Clock = utc_now,
     ) -> None:
         self._jobs = jobs
         self._downloader = downloader
         self._processor = processor
+        self._events = events
         self._clock = clock
 
     def tick(self) -> None:
@@ -63,8 +68,8 @@ class Watcher:
             log.warning("could not fetch task for job %s: %s", job.id, exc)
             return
         updated = reconcile(job, task, self._clock())
-        if updated is not job:
-            self._jobs.update(updated, expected=job.status)
+        if updated is not job and self._jobs.update(updated, expected=job.status):
+            record_status_change(self._events, job, updated, SYSTEM)
 
     def _fetch(self, job: Job) -> BackendTask | None:
         if job.backend_task_id is None:

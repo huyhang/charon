@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ApiError } from "@/api/errors";
 import type { CharonClient } from "@/api/client";
@@ -18,7 +18,10 @@ function setup(overrides: Partial<CharonClient> = {}, bar = <MagnetBar />) {
       new_name: "Show.S01E01.mkv",
       final_path: `/library/tv/Show.S01E01.mkv`,
     }),
-    submitDownload: async () => makeJob({ name: "Show.S01E01.1080p.mkv" }),
+    submitDownload: async () => ({
+      job: makeJob({ name: "Show.S01E01.1080p.mkv" }),
+      created: true,
+    }),
     ...overrides,
   });
   return renderWithApp(
@@ -97,11 +100,22 @@ describe("MagnetBar", () => {
     ["the magnet's name", null, MAGNET, "Show.S01E01.1080p.mkv"],
     ["nothing when neither has one", null, "magnet:?xt=urn:btih:abc", null],
   ])("confirms the download with %s", async (_label, name, magnet, description) => {
-    await setup({ submitDownload: async () => makeJob({ name }) });
+    await setup({ submitDownload: async () => ({ job: makeJob({ name }), created: true }) });
     await userEvent.type(screen.getByLabelText("Magnet link"), `${magnet}{Enter}`);
     const toast = await findToast("Download started");
     if (description) expect(toast).toHaveTextContent(description);
     else expect(toast).toHaveTextContent(/^Download started$/);
+  });
+
+  it("says when the torrent is already in Charon, with a way to open it", async () => {
+    const { router } = await setup({
+      submitDownload: async () => ({ job: makeJob({ id: "j7", name: "Old.mkv" }), created: false }),
+    });
+    await userEvent.type(screen.getByLabelText("Magnet link"), `${MAGNET}{Enter}`);
+    const toast = await findToast("Already in Charon");
+    expect(toast).toHaveTextContent("Old.mkv");
+    await userEvent.click(within(toast).getByRole("button", { name: "Open" }));
+    expect(router.state.location.pathname).toBe("/downloads/j7");
   });
 
   it("is busy while the download is submitted", async () => {

@@ -65,19 +65,29 @@ describe("JobDrawer", () => {
   it.each<[string, Job["error"], string, string | null]>([
     [
       "a download failure with a fix",
-      { stage: "download", code: "backend_error", message: "broken_link" },
+      {
+        stage: "download",
+        code: "backend_error",
+        message: "broken_link",
+        hint: "Check the link is still valid, then retry.",
+      },
       "Download failed",
       "Check the link is still valid",
     ],
     [
       "a filing failure with a fix",
-      { stage: "processing", code: "destination_exists", message: "/tv/x exists" },
+      {
+        stage: "processing",
+        code: "destination_exists",
+        message: "/tv/x exists",
+        hint: "Something is already at the destination.",
+      },
       "Filing failed",
       "already at the destination",
     ],
     [
       "a failure with no known fix",
-      { stage: "processing", code: "mystery", message: "odd" },
+      { stage: "processing", code: "mystery", message: "odd", hint: null },
       "Filing failed",
       null,
     ],

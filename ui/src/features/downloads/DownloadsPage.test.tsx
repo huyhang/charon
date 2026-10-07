@@ -120,7 +120,7 @@ describe("DownloadsPage", () => {
       id: "j1",
       name: "Deep.Link.mkv",
       status: "failed",
-      error: { stage: "download", code: "backend_error", message: "broken_link" },
+      error: { stage: "download", code: "backend_error", message: "broken_link", hint: null },
     });
     const client = createFakeClient({ getDownload: async () => job });
     await renderWithApp(<DownloadsPage />, { client, route: "/downloads/j1", path: PATH });

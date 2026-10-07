@@ -25,24 +25,31 @@ import { ErrorState } from "@/components/ErrorState";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { emptySpec, moveItem, nextPriority, toSpec } from "@/lib/rules";
+import { suggestRule } from "@/lib/feeds";
+import { emptySpec, moveItem, nextPriority, toUpdate } from "@/lib/rules";
 import { RuleEditor, type EditorTarget } from "./RuleEditor";
 import { RuleRow } from "./RuleRow";
 
-function useNewRuleRequest(open: () => void): void {
+/**
+ * Reads and clears `?new=` (open a new rule), with an optional `&sample=` name to start from.
+ * Waits until `ready`, e.g. until the destination roots are known, so the draft can use them.
+ */
+function useNewRuleRequest(open: (sample: string | null) => void, ready: boolean): void {
   const [params, setParams] = useSearchParams();
   const requested = params.get("new") !== null;
+  const sample = params.get("sample");
   useEffect(() => {
-    if (!requested) return;
-    open();
+    if (!requested || !ready) return;
+    open(sample);
     setParams(
       (prev) => {
         prev.delete("new");
+        prev.delete("sample");
         return prev;
       },
       { replace: true },
     );
-  }, [requested, open, setParams]);
+  }, [requested, sample, ready, open, setParams]);
 }
 
 export function RulesPage() {
@@ -59,14 +66,17 @@ export function RulesPage() {
 
   const firstRoot = roots.data?.[0];
   const openNew = useCallback(
-    () =>
+    (sample: string | null = null) => {
+      const spec = emptySpec(nextPriority(list), firstRoot ? `${firstRoot}/` : "");
       setTarget({
         mode: "create",
-        spec: emptySpec(nextPriority(list), firstRoot ? `${firstRoot}/` : ""),
-      }),
+        spec: sample ? { ...spec, ...suggestRule(sample) } : spec,
+        sample: sample ?? undefined,
+      });
+    },
     [list, firstRoot],
   );
-  useNewRuleRequest(openNew);
+  useNewRuleRequest(openNew, !roots.isPending && !rules.isPending);
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return;
@@ -80,7 +90,7 @@ export function RulesPage() {
 
   const onToggle = (rule: Rule, enabled: boolean) =>
     save.mutate(
-      { id: rule.id, spec: { ...toSpec(rule), enabled } },
+      { id: rule.id, spec: toUpdate(rule, { enabled }) },
       {
         onSuccess: () => toast(`${rule.name} ${enabled ? "enabled" : "disabled"}`),
         onError: (error) =>
@@ -94,7 +104,7 @@ export function RulesPage() {
         title="Rules"
         description="Rules are tried top to bottom. The first one whose pattern matches renames and files the download. Drag to reorder."
         actions={
-          <Button onClick={openNew}>
+          <Button onClick={() => openNew()}>
             <PlusIcon /> New rule
           </Button>
         }
@@ -113,7 +123,7 @@ export function RulesPage() {
           title="No rules yet"
           description="Without rules, downloads stay in the download folder. Create one to rename and file them automatically."
           action={
-            <Button onClick={openNew}>
+            <Button onClick={() => openNew()}>
               <PlusIcon /> Create your first rule
             </Button>
           }

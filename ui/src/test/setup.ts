@@ -30,3 +30,4 @@ globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObse
 Element.prototype.scrollIntoView ??= () => {};
 Element.prototype.hasPointerCapture ??= () => false;
 Element.prototype.releasePointerCapture ??= () => {};
+Element.prototype.setPointerCapture ??= () => {};

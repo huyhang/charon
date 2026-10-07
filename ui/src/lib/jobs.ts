@@ -60,19 +60,22 @@ export const PAGE_SIZE = 25;
  */
 export const MAX_LISTED = 100;
 
-const loadedCount = (pages: readonly JobList[]) =>
+/** One page of a cursor-paginated list, e.g. downloads or feed items. */
+export type Page = Pick<JobList, "next_cursor"> & { items: readonly unknown[] };
+
+const loadedCount = (pages: readonly Page[]) =>
   pages.reduce((count, page) => count + page.items.length, 0);
 
-/** The cursor for "Load more": null at the end of the list, or once MAX_LISTED are loaded. */
-export function nextPageCursor(pages: readonly JobList[]): string | null {
+/** The cursor for "Load more": null at the end of the list, or once `max` are loaded. */
+export function nextPageCursor(pages: readonly Page[], max = MAX_LISTED): string | null {
   const last = pages.at(-1);
-  if (!last || loadedCount(pages) >= MAX_LISTED) return null;
+  if (!last || loadedCount(pages) >= max) return null;
   return last.next_cursor;
 }
 
-/** Whether Charon has more downloads than the list will show. */
-export function isListCapped(pages: readonly JobList[]): boolean {
-  return loadedCount(pages) >= MAX_LISTED && Boolean(pages.at(-1)?.next_cursor);
+/** Whether Charon has more than the list will show. */
+export function isListCapped(pages: readonly Page[], max = MAX_LISTED): boolean {
+  return loadedCount(pages) >= max && Boolean(pages.at(-1)?.next_cursor);
 }
 
 /** Poll quickly only while something is moving. */

@@ -3,8 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import type { Principal } from "@/api/types";
 import { createFakeClient } from "@/test/fakeClient";
-import { ADMIN, CLIENT, makeJob } from "@/test/factories";
+import { Toaster } from "@/components/ui/sonner";
+import { ADMIN, CLIENT, makeFeed, makeJob } from "@/test/factories";
 import { renderWithApp } from "@/test/render";
+import { findToast } from "@/test/toast";
 import { useTheme } from "@/theme/ThemeProvider";
 import { CommandPalette, useCommandPaletteShortcut } from "./CommandPalette";
 
@@ -44,10 +46,44 @@ const location = (router: Awaited<ReturnType<typeof renderWithApp>>["router"]) =
 describe("CommandPalette", () => {
   afterEach(() => document.documentElement.classList.remove("dark"));
 
+  const BROKEN = { code: "x", message: "503", hint: null };
+  it.each<[string, () => Promise<ReturnType<typeof makeFeed>[]>, string]>([
+    ["all fine", async () => [makeFeed({ id: "a" })], "Feeds are up to date"],
+    [
+      "one failing",
+      async () => [makeFeed({ id: "a" }), makeFeed({ id: "b", last_error: BROKEN })],
+      "1 feed can't be read",
+    ],
+    [
+      "a paused one's old problem doesn't count",
+      async () => [makeFeed({ id: "a" }), makeFeed({ enabled: false, last_error: BROKEN })],
+      "Feeds are up to date",
+    ],
+    [
+      "unreachable",
+      async () => Promise.reject(new Error("Charon is down")),
+      "Couldn't refresh feeds",
+    ],
+  ])("refreshes every feed (%s)", async (_label, refreshAllFeeds, title) => {
+    const client = createFakeClient({ refreshAllFeeds });
+    await renderWithApp(
+      <>
+        <Harness />
+        <Toaster />
+      </>,
+      { client },
+    );
+    await userEvent.click(screen.getByRole("button", { name: "open palette" }));
+    await userEvent.click(await screen.findByRole("option", { name: "Refresh feeds" }));
+    expect(await findToast(title)).toBeInTheDocument();
+  });
+
   it.each<[string, string]>([
     ["Add a magnet link", "/downloads?add=1"],
     ["New rule", "/rules?new=1"],
+    ["Add a feed", "/feeds?add=1"],
     ["Downloads", "/downloads"],
+    ["Feeds", "/feeds"],
     ["Rules", "/rules"],
     ["API keys", "/keys"],
   ])("%s goes to %s and closes", async (option, destination) => {

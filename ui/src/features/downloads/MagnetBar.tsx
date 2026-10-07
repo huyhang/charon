@@ -1,5 +1,6 @@
 import { Loader2Icon, MagnetIcon, SendHorizonalIcon } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { errorMessage } from "@/api/errors";
 import { useRules, useSubmitDownload } from "@/api/queries";
@@ -30,6 +31,7 @@ export function MagnetBar({ initialMagnet, focusSignal = 0 }: MagnetBarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const rules = useRules();
   const submit = useSubmitDownload();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (initialMagnet) setValue(initialMagnet);
@@ -49,10 +51,14 @@ export function MagnetBar({ initialMagnet, focusSignal = 0 }: MagnetBarProps) {
     submit.mutate(
       { magnet, ruleId },
       {
-        onSuccess: (job) => {
-          toast.success("Download started", {
-            description: job.name ?? magnetName(magnet) ?? undefined,
-          });
+        onSuccess: ({ job, created }) => {
+          const description = job.name ?? magnetName(magnet) ?? undefined;
+          if (created) toast.success("Download started", { description });
+          else
+            toast("Already in Charon", {
+              description,
+              action: { label: "Open", onClick: () => navigate(`/downloads/${job.id}`) },
+            });
           setValue("");
           setRuleChoice(AUTO);
         },

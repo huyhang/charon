@@ -39,6 +39,10 @@ export function routes(devTools?: ReactNode): RouteObject[] {
         { index: true, element: <Navigate to="/downloads" replace /> },
         { path: "downloads/:jobId?", element: <DownloadsPage /> },
         {
+          path: "feeds",
+          lazy: async () => ({ Component: (await import("@/features/feeds/FeedsPage")).FeedsPage }),
+        },
+        {
           path: "rules",
           lazy: async () => ({ Component: (await import("@/features/rules/RulesPage")).RulesPage }),
         },

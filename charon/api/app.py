@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
 
-from charon.api import api_keys, auth, destinations, downloads, health, rules
+from charon.api import api_keys, auth, destinations, downloads, events, feeds, health, rules
 from charon.api.deps import authenticate
 from charon.api.errors import register_error_handlers
 from charon.api.ui import SpaStaticFiles
@@ -40,6 +40,8 @@ def create_api(lifespan: Lifespan | None = None) -> FastAPI:
     app.include_router(downloads.router, prefix=API_PREFIX, dependencies=authenticated)
     app.include_router(rules.router, prefix=API_PREFIX, dependencies=authenticated)
     app.include_router(destinations.router, prefix=API_PREFIX, dependencies=authenticated)
+    app.include_router(events.router, prefix=API_PREFIX, dependencies=authenticated)
+    app.include_router(feeds.router, prefix=API_PREFIX, dependencies=authenticated)
     app.include_router(api_keys.router, prefix=API_PREFIX)
     register_error_handlers(app)
     return app
@@ -83,21 +85,33 @@ def _lifespan(container: Container) -> Lifespan:
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         stop = asyncio.Event()
-        watcher_task = await _start_watcher(container, stop)
+        tasks = await _start_background_work(container, stop)
         yield
         stop.set()
-        if watcher_task is not None:
-            await watcher_task
+        for task in tasks:
+            await task
         for close in container.closers:
             close()
 
     return lifespan
 
 
-async def _start_watcher(container: Container, stop: asyncio.Event) -> asyncio.Task[None] | None:
-    if not container.poll_interval_seconds:
-        return None
-    await asyncio.to_thread(container.watcher.recover)
-    return asyncio.create_task(
-        run_periodically(container.watcher.tick, container.poll_interval_seconds, stop)
-    )
+def background_work(container: Container) -> list[tuple[Callable[[], None], float]]:
+    """Each periodic task with its interval; a task without an interval doesn't run."""
+    work = [
+        (container.watcher.tick, container.poll_interval_seconds),
+        (container.feed_service.refresh_due, container.feed_poll_interval_seconds),
+        (container.housekeeper.tick, container.housekeeping_interval_seconds),
+    ]
+    return [(task, interval) for task, interval in work if interval]
+
+
+async def _start_background_work(
+    container: Container, stop: asyncio.Event
+) -> list[asyncio.Task[None]]:
+    if container.poll_interval_seconds:
+        await asyncio.to_thread(container.watcher.recover)
+    return [
+        asyncio.create_task(run_periodically(task, interval, stop))
+        for task, interval in background_work(container)
+    ]

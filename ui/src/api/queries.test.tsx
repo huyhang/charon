@@ -75,32 +75,16 @@ const [TV, MOVIES, ANIME] = RULES as [Rule, Rule, Rule];
 const ids = (rules: Rule[] | undefined) => rules?.map((rule) => rule.id);
 
 describe("useReorderRules", () => {
-  it.each<[string, Rule[], [string, number][]]>([
-    [
-      "swap the first two",
-      [MOVIES, TV, ANIME],
-      [
-        ["b", 10],
-        ["a", 20],
-      ],
-    ],
-    [
-      "move the last to the top",
-      [ANIME, TV, MOVIES],
-      [
-        ["c", 10],
-        ["a", 20],
-        ["b", 30],
-      ],
-    ],
-    ["keep the order", RULES, []],
-  ])("%s: saves only the priorities that change", async (_label, ordered, saved) => {
-    const client = createFakeClient({ updateRule: async (id, spec) => makeRule({ ...spec, id }) });
+  it.each<[string, Rule[]]>([
+    ["swap the first two", [MOVIES, TV, ANIME]],
+    ["move the last to the top", [ANIME, TV, MOVIES]],
+  ])("%s: saves the whole order in one request", async (_label, ordered) => {
+    const client = createFakeClient({ reorderRules: async () => ordered });
     const { queryClient, wrapper } = harness(client);
     queryClient.setQueryData(queryKeys.rules, RULES);
     const { result } = renderHook(() => useReorderRules(), { wrapper });
     await act(() => result.current.mutateAsync(ordered));
-    expect(client.updateRule.mock.calls.map(([id, spec]) => [id, spec.priority])).toEqual(saved);
+    expect(client.reorderRules).toHaveBeenCalledWith(ids(ordered));
     expect(ids(queryClient.getQueryData(queryKeys.rules))).toEqual(ids(ordered));
     expect(queryClient.getQueryState(queryKeys.rules)?.isInvalidated).toBe(true);
   });
@@ -108,7 +92,7 @@ describe("useReorderRules", () => {
   it("shows the new order while saving, and puts the old one back if saving fails", async () => {
     let fail: (error: Error) => void = () => {};
     const client = createFakeClient({
-      updateRule: () => new Promise<Rule>((_, reject) => (fail = reject)),
+      reorderRules: () => new Promise<Rule[]>((_, reject) => (fail = reject)),
     });
     const { queryClient, wrapper } = harness(client);
     queryClient.setQueryData(queryKeys.rules, RULES);
@@ -131,7 +115,7 @@ describe("useSaveRule", () => {
   ])("%s and refreshes the rule list", async (_label, id, method) => {
     const client = createFakeClient({
       createRule: async (body) => makeRule({ ...body, id: "new" }),
-      updateRule: async (ruleId, body) => makeRule({ ...body, id: ruleId }),
+      updateRule: async (ruleId, body) => makeRule({ ...body, id: ruleId, version: 2 }),
     });
     const { queryClient, wrapper } = harness(client);
     queryClient.setQueryData(queryKeys.rules, RULES);

@@ -2,6 +2,7 @@ import {
   keepPreviousData,
   useInfiniteQuery,
   useMutation,
+  useMutationState,
   useQuery,
   useQueryClient,
   type QueryClient,
@@ -14,9 +15,23 @@ import {
   summaryPollInterval,
   type FilterId,
 } from "@/lib/jobs";
-import { priorityChanges } from "@/lib/rules";
+import { FEED_PAGE_SIZE, feedPollInterval, MAX_FEED_ITEMS } from "@/lib/feeds";
 import { useClient } from "./context";
-import type { Job, JobList, PreviewRequest, Principal, Role, Rule, RuleSpec } from "./types";
+import { isApiError } from "./errors";
+import type {
+  FeedItemList,
+  FeedSpec,
+  FeedUpdate,
+  Job,
+  JobList,
+  ListFeedItemsQuery,
+  MarkAllSeenQuery,
+  PreviewRequest,
+  Principal,
+  Role,
+  Rule,
+  RuleUpdate,
+} from "./types";
 
 export const queryKeys = {
   downloads: ["downloads"] as const,
@@ -32,7 +47,15 @@ export const queryKeys = {
   roots: ["destinations", "roots"] as const,
   folders: (path: string) => ["destinations", "folders", path] as const,
   preview: (request: PreviewRequest) => ["preview", request] as const,
+  feeds: ["feeds"] as const,
+  feedList: ["feeds", "list"] as const,
+  feedItems: ["feeds", "items"] as const,
+  feedItemList: (query: ListFeedItemsQuery) => ["feeds", "items", query] as const,
+  feedSummary: ["feeds", "summary"] as const,
+  feedPreview: (url: string) => ["feed-preview", url] as const,
 };
+
+const FEEDS_POLL_MS = 30000;
 
 const HEALTH_POLL_MS = 15000;
 export const SESSION_CHECK_MS = 30000;
@@ -129,31 +152,30 @@ export function useRules() {
 
 export function useSaveRule() {
   const client = useClient();
-  const onSuccess = useInvalidate(queryKeys.rules);
+  // Feed items show which rule matches, so they change with the rules.
+  const onSuccess = useInvalidate(queryKeys.rules, queryKeys.feedItems);
+  const reloadRules = useInvalidate(queryKeys.rules);
   return useMutation({
-    mutationFn: ({ id, spec }: { id?: string; spec: RuleSpec }) =>
+    mutationFn: ({ id, spec }: { id?: string; spec: RuleUpdate }) =>
       id ? client.updateRule(id, spec) : client.createRule(spec),
     onSuccess,
+    // Someone else changed the rule: load its latest version, so opening it again can save.
+    onError: (error) => (isApiError(error, 409) ? reloadRules() : undefined),
   });
 }
 
 export function useDeleteRule() {
   const client = useClient();
-  const onSuccess = useInvalidate(queryKeys.rules);
+  const onSuccess = useInvalidate(queryKeys.rules, queryKeys.feedItems);
   return useMutation({ mutationFn: (id: string) => client.deleteRule(id), onSuccess });
 }
 
-/** Saves a new rule order by re-spacing priorities, showing the new order immediately. */
+/** Saves a new rule order in one request, showing the new order immediately. */
 export function useReorderRules() {
   const client = useClient();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (ordered: Rule[]) => {
-      const changes = priorityChanges(ordered);
-      await Promise.all(
-        changes.map(({ rule, priority }) => client.updateRule(rule.id, { ...rule, priority })),
-      );
-    },
+    mutationFn: (ordered: Rule[]) => client.reorderRules(ordered.map((rule) => rule.id)),
     onMutate: async (ordered) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.rules });
       const previous = queryClient.getQueryData<Rule[]>(queryKeys.rules);
@@ -162,7 +184,11 @@ export function useReorderRules() {
     },
     onError: (_error, _ordered, context) =>
       queryClient.setQueryData(queryKeys.rules, context?.previous),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.rules }),
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.rules }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.feedItems }),
+      ]),
   });
 }
 
@@ -240,5 +266,157 @@ export function useFolders(path: string | null) {
     queryFn: () => client.destinationFolders(path!),
     enabled: path !== null,
     retry: false,
+  });
+}
+
+type FeedItemPages = { pages: FeedItemList[] };
+
+export function allFeedItems(data: FeedItemPages | undefined) {
+  return data?.pages.flatMap((page) => page.items) ?? [];
+}
+
+export function useFeeds() {
+  const client = useClient();
+  return useQuery({
+    queryKey: queryKeys.feedList,
+    queryFn: () => client.listFeeds(),
+    refetchInterval: FEEDS_POLL_MS,
+  });
+}
+
+/** Unseen items, for the nav badge. */
+export function useFeedSummary() {
+  const client = useClient();
+  return useQuery({
+    queryKey: queryKeys.feedSummary,
+    queryFn: () => client.feedSummary(),
+    refetchInterval: FEEDS_POLL_MS,
+  });
+}
+
+export function useFeedItems(query: Omit<ListFeedItemsQuery, "cursor" | "limit">) {
+  const client = useClient();
+  return useInfiniteQuery({
+    queryKey: queryKeys.feedItemList(query),
+    queryFn: ({ pageParam }) =>
+      client.listFeedItems({ ...query, limit: FEED_PAGE_SIZE, cursor: pageParam }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (_last, pages) => nextPageCursor(pages, MAX_FEED_ITEMS),
+    refetchInterval: (q) => feedPollInterval(allFeedItems(q.state.data)),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useFeedPreview(url: string | null) {
+  const client = useClient();
+  return useQuery({
+    queryKey: queryKeys.feedPreview(url ?? ""),
+    queryFn: () => client.previewFeed(url!),
+    enabled: url !== null,
+    retry: false,
+    staleTime: 30000,
+  });
+}
+
+export function useCreateFeed() {
+  const client = useClient();
+  const onSuccess = useInvalidate(queryKeys.feeds);
+  return useMutation({ mutationFn: (spec: FeedSpec) => client.createFeed(spec), onSuccess });
+}
+
+export function useUpdateFeed() {
+  const client = useClient();
+  const onSuccess = useInvalidate(queryKeys.feeds);
+  return useMutation({
+    mutationFn: ({ id, changes }: { id: string; changes: FeedUpdate }) =>
+      client.updateFeed(id, changes),
+    onSuccess,
+  });
+}
+
+export function useDeleteFeed() {
+  const client = useClient();
+  const onSuccess = useInvalidate(queryKeys.feeds);
+  return useMutation({ mutationFn: (id: string) => client.deleteFeed(id), onSuccess });
+}
+
+export function useRefreshFeed() {
+  const client = useClient();
+  const onSuccess = useInvalidate(queryKeys.feeds);
+  return useMutation({ mutationFn: (id: string) => client.refreshFeed(id), onSuccess });
+}
+
+/** Refreshes every enabled feed on the server; resolves to how many couldn't be read. */
+export function useRefreshAllFeeds() {
+  const client = useClient();
+  const onSuccess = useInvalidate(queryKeys.feeds);
+  return useMutation({
+    mutationFn: async () => {
+      const feeds = await client.refreshAllFeeds();
+      return feeds.filter((feed) => feed.enabled && feed.last_error).length;
+    },
+    onSuccess,
+  });
+}
+
+export function useRevealFeedUrl() {
+  const client = useClient();
+  return useMutation({ mutationFn: (id: string) => client.revealFeedUrl(id) });
+}
+
+/** "Mark all seen" for a view of the inbox: items the view hides stay new. */
+export function useMarkAllFeedItemsSeen() {
+  const client = useClient();
+  const onSuccess = useInvalidate(queryKeys.feedSummary, queryKeys.feedItems);
+  return useMutation({
+    mutationFn: (view: MarkAllSeenQuery) => client.markAllFeedItemsSeen(view),
+    onSuccess,
+  });
+}
+
+const DOWNLOAD_FEED_ITEM = ["feeds", "download"] as const;
+type FeedItemDownload = { infoHash: string; ruleId?: string | null };
+
+export function useDownloadFeedItem() {
+  const client = useClient();
+  const onSuccess = useInvalidate(queryKeys.feedItems, queryKeys.downloads);
+  return useMutation({
+    mutationKey: DOWNLOAD_FEED_ITEM,
+    mutationFn: ({ infoHash, ruleId }: FeedItemDownload) =>
+      client.downloadFeedItem(infoHash, ruleId),
+    onSuccess,
+  });
+}
+
+/** The info hashes of every single-item download still in flight, however many there are. */
+export function usePendingFeedDownloads(): ReadonlySet<string> {
+  const hashes = useMutationState({
+    filters: { mutationKey: DOWNLOAD_FEED_ITEM, status: "pending" },
+    select: (mutation) => (mutation.state.variables as FeedItemDownload).infoHash,
+  });
+  return new Set(hashes);
+}
+
+export interface BulkDownloadResult {
+  started: number;
+  already: number;
+  /** The items that couldn't start, with why. */
+  failed: { infoHash: string; error: unknown }[];
+}
+
+/** Downloads several items; resolves to how many started, and which failed and why. */
+export function useDownloadFeedItems() {
+  const client = useClient();
+  const onSuccess = useInvalidate(queryKeys.feedItems, queryKeys.downloads);
+  return useMutation({
+    mutationFn: async (infoHashes: string[]): Promise<BulkDownloadResult> => {
+      const results = await Promise.allSettled(infoHashes.map((h) => client.downloadFeedItem(h)));
+      const failed = results.flatMap((r, i) =>
+        r.status === "rejected" ? [{ infoHash: infoHashes[i]!, error: r.reason }] : [],
+      );
+      const started = results.filter((r) => r.status === "fulfilled" && r.value.created).length;
+      return { started, already: results.length - started - failed.length, failed };
+    },
+    onSuccess,
   });
 }

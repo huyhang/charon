@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ApiError } from "@/api/errors";
-import type { Rule, RuleSpec } from "@/api/types";
+import type { Rule, RuleSpec, RuleUpdate } from "@/api/types";
 import { Toaster } from "@/components/ui/sonner";
 import { createFakeClient } from "@/test/fakeClient";
 import { makeRule } from "@/test/factories";
@@ -10,16 +10,21 @@ import { RulesPage } from "./RulesPage";
 import { stepSummary } from "./RuleRow";
 
 /** A fake rule store: saving changes what the next listing returns, ordered like Charon's. */
-function ruleStore(rules: Rule[], failFor: string[] = []) {
+function ruleStore(rules: Rule[], { failReorder = false, failUpdate = false } = {}) {
   let stored = rules.map((rule) => ({ ...rule }));
+  const sorted = () => [...stored].sort((a, b) => a.priority - b.priority);
   return createFakeClient({
-    listRules: async () => [...stored].sort((a, b) => a.priority - b.priority),
+    listRules: async () => sorted(),
     updateRule: async (id: string, spec: RuleSpec) => {
-      if (failFor.includes(id))
-        throw new ApiError(500, { code: "internal_error", message: "disk full" });
+      if (failUpdate) throw new ApiError(500, { code: "internal_error", message: "disk full" });
       const saved = { ...stored.find((rule) => rule.id === id)!, ...spec };
       stored = stored.map((rule) => (rule.id === id ? saved : rule));
       return saved;
+    },
+    reorderRules: async (ids: string[]) => {
+      if (failReorder) throw new ApiError(500, { code: "internal_error", message: "disk full" });
+      stored = stored.map((rule) => ({ ...rule, priority: (ids.indexOf(rule.id) + 1) * 10 }));
+      return sorted();
     },
   });
 }
@@ -86,12 +91,12 @@ describe("RulesPage", () => {
     ).toEqual([expect.stringContaining("TV"), expect.stringContaining("Movies")]);
   });
 
-  it.each<[string, boolean, string[], boolean, string]>([
-    ["turns off an enabled rule", true, [], false, "TV disabled"],
-    ["turns on a disabled rule", false, [], true, "TV enabled"],
-    ["reports a failed save", true, ["a"], false, "Couldn't update the rule"],
-  ])("%s", async (_label, enabled, failFor, saved, toastText) => {
-    const client = ruleStore([makeRule({ id: "a", name: "TV", enabled })], failFor);
+  it.each<[string, boolean, boolean, boolean, string]>([
+    ["turns off an enabled rule", true, false, false, "TV disabled"],
+    ["turns on a disabled rule", false, false, true, "TV enabled"],
+    ["reports a failed save", true, true, false, "Couldn't update the rule"],
+  ])("%s", async (_label, enabled, failUpdate, saved, toastText) => {
+    const client = ruleStore([makeRule({ id: "a", name: "TV", enabled })], { failUpdate });
     await renderWithApp(
       <>
         <RulesPage />
@@ -103,7 +108,7 @@ describe("RulesPage", () => {
     expect(await screen.findByText(toastText)).toBeInTheDocument();
     expect(client.updateRule).toHaveBeenCalledWith(
       "a",
-      expect.objectContaining({ enabled: saved }),
+      expect.objectContaining({ enabled: saved, version: 1 }),
     );
   });
 
@@ -118,7 +123,7 @@ describe("RulesPage", () => {
     expect(within(row).getByText("1 rename step")).toBeInTheDocument();
   });
 
-  it("reorders by keyboard drag, saving only the priorities that change", async () => {
+  it("reorders by keyboard drag, saving the new order in one request", async () => {
     const layout = layOutRows();
     const client = ruleStore(THREE);
     await renderWithApp(<RulesPage />, { client });
@@ -127,9 +132,8 @@ describe("RulesPage", () => {
     await userEvent.keyboard("{ArrowDown}");
     await userEvent.keyboard(" ");
     await waitFor(() => expect(rowNames()).toEqual(["Movies", "TV", "Anime"]));
-    await waitFor(() => expect(client.updateRule).toHaveBeenCalledTimes(2));
-    expect(client.updateRule).toHaveBeenCalledWith("b", expect.objectContaining({ priority: 10 }));
-    expect(client.updateRule).toHaveBeenCalledWith("a", expect.objectContaining({ priority: 20 }));
+    await waitFor(() => expect(client.reorderRules).toHaveBeenCalledWith(["b", "a", "c"]));
+    expect(client.updateRule).not.toHaveBeenCalled();
     layout.mockRestore();
   });
 
@@ -141,13 +145,13 @@ describe("RulesPage", () => {
     await userEvent.keyboard(" ");
     await userEvent.keyboard(" ");
     expect(rowNames()).toEqual(["TV", "Movies", "Anime"]);
-    expect(client.updateRule).not.toHaveBeenCalled();
+    expect(client.reorderRules).not.toHaveBeenCalled();
     layout.mockRestore();
   });
 
   it("puts the old order back and says so when saving a new order fails", async () => {
     const layout = layOutRows();
-    const client = ruleStore(THREE, ["a"]);
+    const client = ruleStore(THREE, { failReorder: true });
     await renderWithApp(
       <>
         <RulesPage />
@@ -161,7 +165,7 @@ describe("RulesPage", () => {
     await userEvent.keyboard(" ");
     const toast = (await screen.findByText("Couldn't save the new order")).closest("li");
     expect(within(toast as HTMLElement).getByText("disk full")).toBeInTheDocument();
-    // Back to what Charon has: TV's save failed, so it still sorts first.
+    // Back to what Charon has: the save failed, so TV still sorts first.
     await waitFor(() => expect(client.listRules).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(rowNames()).toEqual(["TV", "Movies", "Anime"]));
     layout.mockRestore();
@@ -205,5 +209,52 @@ describe("RulesPage", () => {
   it("opens the editor from ?new", async () => {
     await renderWithApp(<RulesPage />, { route: "/rules?new=1" });
     expect(await screen.findByRole("dialog", { name: "New rule" })).toBeInTheDocument();
+  });
+
+  it("starts a rule from a download name, e.g. a feed item's", async () => {
+    const name = "Some.Documentary.Special.1080p.mkv";
+    const { router } = await renderWithApp(<RulesPage />, {
+      route: `/rules?new=1&sample=${encodeURIComponent(name)}`,
+    });
+    expect(await screen.findByRole("dialog", { name: "New rule" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toHaveValue("Some Documentary Special");
+    expect(screen.getByLabelText("Pattern")).toHaveValue("Some.Documentary.Special.*");
+    expect(screen.getByLabelText("Sample name")).toHaveValue(name);
+    expect(screen.getByLabelText("Destination")).toHaveValue("/library/");
+    expect(router.state.location.search).toBe("");
+  });
+
+  it("saves after a conflict once the rule is opened again", async () => {
+    let stored: Rule = makeRule({ id: "a", name: "TV", version: 1 });
+    const client = createFakeClient({
+      listRules: async () => [stored],
+      updateRule: async (_id: string, spec: RuleUpdate) => {
+        if (spec.version != null && spec.version !== stored.version) {
+          throw new ApiError(409, {
+            code: "rule_changed",
+            message: "rule a changed since you loaded it; reload it",
+          });
+        }
+        stored = { ...stored, ...spec, version: stored.version + 1 };
+        return stored;
+      },
+    });
+    await renderWithApp(<RulesPage />, { client, route: "/rules", path: "/rules" });
+    const open = async () =>
+      userEvent.click(await screen.findByRole("button", { name: /^TVglob/ }));
+
+    await open();
+    stored = { ...stored, pattern: "*changed*", version: 2 }; // someone else saves meanwhile
+    await userEvent.click(screen.getByRole("button", { name: "Save rule" }));
+    await screen.findByText(/changed since you loaded it/);
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    // As the hint says: load it again, then save.
+    await open();
+    await userEvent.click(screen.getByRole("button", { name: "Save rule" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(client.updateRule.mock.calls.map(([, spec]) => spec.version)).toEqual([1, 2]);
+    expect(stored.version).toBe(3);
   });
 });

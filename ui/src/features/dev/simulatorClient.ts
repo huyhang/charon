@@ -8,6 +8,17 @@ export interface FakeTask {
   additional: { transfer: { size_downloaded: string; speed_download: number } };
 }
 
+export type FakeFeedMode = "ok" | "http_error" | "bad_xml";
+
+/** One of the fake's RSS feeds, served at `path`. */
+export interface FakeFeed {
+  slug: string;
+  title: string;
+  path: string;
+  mode: FakeFeedMode;
+  items: { name: string; info_hash: string; magnet: string }[];
+}
+
 /** Steers the fake Download Station through its test-only `/_control` endpoints. */
 export interface SimulatorClient {
   listTasks(): Promise<FakeTask[]>;
@@ -15,6 +26,10 @@ export interface SimulatorClient {
   fail(id: string, detail: string): Promise<void>;
   expireSessions(): Promise<void>;
   reset(): Promise<void>;
+  listFeeds(): Promise<FakeFeed[]>;
+  publish(slug: string): Promise<void>;
+  breakFeed(slug: string, mode: Exclude<FakeFeedMode, "ok">): Promise<void>;
+  healFeed(slug: string): Promise<void>;
 }
 
 export function createHttpSimulator(
@@ -39,6 +54,10 @@ export function createHttpSimulator(
     fail: (id, detail) => post(`/tasks/${encodeURIComponent(id)}/fail`, { detail }),
     expireSessions: () => post("/sessions/expire"),
     reset: () => post("/reset"),
+    listFeeds: async () => (await call("/feeds")).json(),
+    publish: (slug) => post(`/feeds/${encodeURIComponent(slug)}/publish`),
+    breakFeed: (slug, mode) => post(`/feeds/${encodeURIComponent(slug)}/break`, { mode }),
+    healFeed: (slug) => post(`/feeds/${encodeURIComponent(slug)}/heal`),
   };
 }
 

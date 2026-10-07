@@ -1,7 +1,7 @@
 import { SearchIcon } from "lucide-react";
 import { useCallback, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router";
-import { useSessionCheck } from "@/api/queries";
+import { useFeedSummary, useSessionCheck } from "@/api/queries";
 import { usePrincipal } from "@/auth/AuthProvider";
 import { HealthIndicator } from "@/components/HealthIndicator";
 import { Logo, LogoMark } from "@/components/Logo";
@@ -10,7 +10,24 @@ import { UserMenu } from "@/components/UserMenu";
 import { useGlobalMagnetPaste } from "@/hooks/useGlobalPaste";
 import { cn } from "@/lib/cn";
 import { CommandPalette, useCommandPaletteShortcut } from "./CommandPalette";
-import { navItemsFor } from "./nav";
+import { badgeLabel, navItemsFor } from "./nav";
+
+function NavBadge({ to, className }: { to: string; className?: string }) {
+  const summary = useFeedSummary();
+  const label = to === "/feeds" ? badgeLabel(summary.data?.unread) : null;
+  if (!label) return null;
+  return (
+    <span
+      className={cn(
+        "rounded-full bg-primary px-1.5 text-[10px] leading-4 font-semibold text-primary-foreground tabular-nums",
+        className,
+      )}
+      aria-label={`${label} new`}
+    >
+      {label}
+    </span>
+  );
+}
 
 export function AppShell({ devTools }: { devTools?: ReactNode }) {
   const principal = usePrincipal();
@@ -54,7 +71,8 @@ export function AppShell({ devTools }: { devTools?: ReactNode }) {
               }
             >
               <Icon className="size-4" />
-              {label}
+              <span className="flex-1">{label}</span>
+              <NavBadge to={to} />
             </NavLink>
           ))}
         </nav>
@@ -102,7 +120,10 @@ export function AppShell({ devTools }: { devTools?: ReactNode }) {
               )
             }
           >
-            <Icon className="size-5" />
+            <span className="relative">
+              <Icon className="size-5" />
+              <NavBadge to={to} className="absolute -top-1.5 -right-3" />
+            </span>
             {label}
           </NavLink>
         ))}

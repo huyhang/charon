@@ -5,6 +5,7 @@ import pytest
 from charon.domain.destinations import DestinationPolicy
 from charon.domain.models import JobStatus
 from charon.errors import DownloaderError
+from charon.hints import hint_for
 from charon.ports.downloader import BackendStatus, BackendTask
 from tests.unit.api_harness import Harness
 
@@ -151,7 +152,12 @@ def test_downloader_failure_maps_to_502(h: Harness) -> None:
     response = h.client.post("/downloads", json={"magnet": MAGNET})
     assert response.status_code == 502
     assert response.json() == {
-        "error": {"code": "downloader_unreachable", "message": "NAS offline"}
+        "error": {
+            "code": "downloader_unreachable",
+            "message": "NAS offline",
+            "hint": hint_for("downloader_unreachable"),
+            "retryable": True,
+        }
     }
 
 

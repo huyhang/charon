@@ -31,7 +31,36 @@ export function createFakeClient(overrides: Partial<CharonClient> = {}): FakeCli
       throw new Error("updateRule not stubbed");
     },
     deleteRule: async () => {},
+    reorderRules: async () => [],
     previewRule: async ({ name }) => ({ rule_id: null, new_name: name, final_path: null }),
+    listFeeds: async () => [],
+    createFeed: async () => {
+      throw new Error("createFeed not stubbed");
+    },
+    updateFeed: async () => {
+      throw new Error("updateFeed not stubbed");
+    },
+    deleteFeed: async () => {},
+    refreshFeed: async () => {
+      throw new Error("refreshFeed not stubbed");
+    },
+    refreshAllFeeds: async () => [],
+    revealFeedUrl: async () => {
+      throw new Error("revealFeedUrl not stubbed");
+    },
+    previewFeed: async () => {
+      throw new Error("previewFeed not stubbed");
+    },
+    listFeedItems: async () => ({ items: [], next_cursor: null }),
+    getFeedItem: async () => {
+      throw new Error("getFeedItem not stubbed");
+    },
+    feedSummary: async () => ({ unread: 0, feeds: {} }),
+    markFeedItemsSeen: async () => 0,
+    markAllFeedItemsSeen: async () => 0,
+    downloadFeedItem: async () => {
+      throw new Error("downloadFeedItem not stubbed");
+    },
     listApiKeys: async () => [],
     issueApiKey: async () => {
       throw new Error("issueApiKey not stubbed");

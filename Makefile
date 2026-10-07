@@ -57,6 +57,7 @@ docker-dev:  ## Run the dev stack in Docker
 
 docker-e2e:  ## End-to-end tests against `make docker-dev`
 	E2E_LIBRARY_DIR=var/library E2E_LIBRARY_DIR_SERVICE=/library \
+		FAKE_DS_E2E_URL_SERVICE=http://fake-ds:5000 \
 		$(DEV_E2E_ENV) $(PYTHON) -m pytest tests/e2e
 
 ui-install:  ## Install the UI's dependencies (Node 22.22.2+, 24.15+ or 26+)
@@ -91,4 +92,4 @@ ui-api:  ## Regenerate the UI's API types from docs/openapi.json
 	cd ui && npm run api
 
 ui-e2e:  ## Browser tests against a running `make ui-dev` (first: npx playwright install chromium)
-	cd ui && npm run e2e
+	cd ui && FAKE_DS_URL=http://127.0.0.1:$(FAKE_DS_PORT) npm run e2e

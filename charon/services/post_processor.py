@@ -4,14 +4,16 @@ import logging
 from pathlib import PurePosixPath
 
 from charon.domain.destinations import DestinationPolicy
-from charon.domain.models import ErrorStage, Job, JobError, JobStatus, Rule
+from charon.domain.models import SYSTEM, ErrorStage, Job, JobError, JobStatus, Rule
 from charon.domain.rename import is_safe_name
 from charon.errors import CharonError
 from charon.ports.clock import Clock, utc_now
 from charon.ports.downloader import Downloader
+from charon.ports.events import EventLog
 from charon.ports.files import FileOps
 from charon.ports.stores import JobStore
 from charon.services.backend import remove_task_best_effort
+from charon.services.job_events import record_status_change
 from charon.services.rule_service import RuleService
 
 log = logging.getLogger(__name__)
@@ -30,6 +32,7 @@ class PostProcessor:
         files: FileOps,
         download_dir: PurePosixPath,
         policy: DestinationPolicy,
+        events: EventLog,
         clock: Clock = utc_now,
     ) -> None:
         self._jobs = jobs
@@ -38,6 +41,7 @@ class PostProcessor:
         self._files = files
         self._download_dir = download_dir
         self._policy = policy
+        self._events = events
         self._clock = clock
 
     def process(self, job: Job) -> Job | None:
@@ -49,12 +53,14 @@ class PostProcessor:
         claimed = self._with(job, status=JobStatus.PROCESSING)
         if not self._jobs.update(claimed, expected=JobStatus.COMPLETED):
             return None
+        record_status_change(self._events, job, claimed, SYSTEM)
         try:
             result = self._run(claimed)
         except Exception:
             log.exception("unexpected error while processing job %s", job.id)
             result = self._failed(claimed, "internal_error", "unexpected error, see the log")
-        self._jobs.update(result, expected=JobStatus.PROCESSING)
+        if self._jobs.update(result, expected=JobStatus.PROCESSING):
+            record_status_change(self._events, claimed, result, SYSTEM)
         return result
 
     def _run(self, job: Job) -> Job:

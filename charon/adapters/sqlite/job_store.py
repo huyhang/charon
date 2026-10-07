@@ -1,4 +1,5 @@
-from collections.abc import Collection
+from collections.abc import Collection, Iterator
+from itertools import batched
 
 from charon.adapters.sqlite.database import Database, sortable_time
 from charon.domain.models import Job, JobStatus
@@ -12,8 +13,14 @@ class SqliteJobStore:
     def add(self, job: Job) -> None:
         with self._db.transaction() as conn:
             conn.execute(
-                "INSERT INTO jobs (id, status, created_at, data) VALUES (?, ?, ?, ?)",
-                (job.id, job.status, sortable_time(job.created_at), job.model_dump_json()),
+                "INSERT INTO jobs (id, status, created_at, info_hash, data) VALUES (?, ?, ?, ?, ?)",
+                (
+                    job.id,
+                    job.status,
+                    sortable_time(job.created_at),
+                    job.info_hash,
+                    job.model_dump_json(),
+                ),
             )
 
     def get(self, job_id: str) -> Job | None:
@@ -48,6 +55,22 @@ class SqliteJobStore:
         with self._db.transaction() as conn:
             rows = conn.execute("SELECT status, COUNT(*) FROM jobs GROUP BY status").fetchall()
         return {JobStatus(status): count for status, count in rows}
+
+    def latest_by_hash(self, info_hashes: Collection[str]) -> dict[str, Job]:
+        # Oldest first, so each hash ends up mapped to its newest job.
+        return {hash_: job for hash_, job in self._by_hash(info_hashes)}
+
+    def _by_hash(self, info_hashes: Collection[str]) -> Iterator[tuple[str, Job]]:
+        # Batched to stay under SQLite's limit on query parameters.
+        for batch in batched(info_hashes, 500):
+            marks = ", ".join("?" * len(batch))
+            sql = (
+                f"SELECT info_hash, data FROM jobs WHERE info_hash IN ({marks}) "
+                "ORDER BY created_at, id"
+            )
+            with self._db.transaction() as conn:
+                rows = conn.execute(sql, batch).fetchall()
+            yield from ((hash_, Job.model_validate_json(data)) for hash_, data in rows)
 
 
 def _filters(

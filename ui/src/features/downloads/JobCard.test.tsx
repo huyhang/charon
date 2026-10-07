@@ -33,7 +33,12 @@ describe("JobCard", () => {
       "failed",
       {
         status: "failed",
-        error: { stage: "processing", code: "destination_exists", message: "/tv/x exists" },
+        error: {
+          stage: "processing",
+          code: "destination_exists",
+          message: "/tv/x exists",
+          hint: "Something is already at the destination.",
+        },
       },
       [/\/tv\/x exists/, /already at the destination/],
     ],
@@ -104,10 +109,21 @@ describe("JobCard", () => {
   // `shown` counts the status badge too when the message is just "Failed".
   it.each<[string, Job["error"], string, number, string | null]>([
     ["no details", null, "Failed", 2, null],
-    ["no known fix", { stage: "download", code: "mystery", message: "odd" }, "odd", 1, null],
+    [
+      "no known fix",
+      { stage: "download", code: "mystery", message: "odd", hint: null },
+      "odd",
+      1,
+      null,
+    ],
     [
       "a known fix",
-      { stage: "download", code: "task_missing", message: "gone" },
+      {
+        stage: "download",
+        code: "task_missing",
+        message: "gone",
+        hint: "The task disappeared. Retry to start a fresh download.",
+      },
       "gone",
       1,
       "Retry to start a fresh download.",

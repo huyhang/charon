@@ -8,6 +8,7 @@ import regex
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 from charon.domain.destinations import normalize
+from charon.domain.magnets import info_hash
 
 
 class JobStatus(StrEnum):
@@ -43,6 +44,18 @@ class Progress(BaseModel):
     eta_seconds: int | None = None
 
 
+class Actor(BaseModel):
+    """Who made a change: whoever holds an API key, or Charon itself."""
+
+    name: str
+    key_id: str | None = Field(
+        default=None, description="Null for Charon itself and the bootstrap key."
+    )
+
+
+SYSTEM = Actor(name="charon")
+
+
 class Job(BaseModel):
     id: str
     magnet: str
@@ -57,6 +70,11 @@ class Job(BaseModel):
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None = None
+    created_by: Actor | None = None
+
+    @property
+    def info_hash(self) -> str | None:
+        return info_hash(self.magnet)
 
 
 class MatchType(StrEnum):
@@ -96,6 +114,9 @@ class RuleSpec(BaseModel):
     """A rule as supplied by a client, before it has an identity."""
 
     name: str = Field(min_length=1)
+    description: str = Field(
+        default="", max_length=500, description="Why the rule exists, in plain words."
+    )
     priority: int = 100
     enabled: bool = True
     match_type: MatchType = MatchType.GLOB
@@ -122,6 +143,9 @@ class Rule(RuleSpec):
     id: str
     # Breaks priority ties: the older rule wins.
     created_at: datetime
+    version: int = Field(default=1, description="Goes up by one on every change.")
+    created_by: Actor | None = None
+    updated_by: Actor | None = None
 
 
 # Rules use the `regex` module (a superset of `re`) because it can time out a runaway match.
@@ -172,3 +196,18 @@ class Principal(BaseModel):
     name: str
     role: Role
     key_id: str | None = None
+
+    @property
+    def actor(self) -> Actor:
+        return Actor(name=self.name, key_id=self.key_id)
+
+
+class IdempotencyRecord(BaseModel):
+    """What an earlier request carrying the same Idempotency-Key created."""
+
+    scope: str
+    key: str
+    # Hash of the request body, so reusing a key for a different request is caught.
+    fingerprint: str
+    resource_id: str
+    created_at: datetime

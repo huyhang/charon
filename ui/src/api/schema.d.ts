@@ -110,7 +110,13 @@ export interface paths {
         /** List Downloads */
         get: operations["listDownloads"];
         put?: never;
-        /** Submit Download */
+        /**
+         * Submit Download
+         * @description Start downloading a magnet.
+         *
+         *     Answers 202 with a new job, or 200 with the existing job when the same torrent (same info
+         *     hash) is already in Charon and not cancelled, or when `Idempotency-Key` repeats a request.
+         */
         post: operations["submitDownload"];
         delete?: never;
         options?: never;
@@ -173,6 +179,275 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Events
+         * @description What happened since `after`, oldest first: job status changes, rule edits, feed items…
+         *
+         *     Poll with the returned `cursor` to follow along. Events are kept for 30 days.
+         */
+        get: operations["listEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Feeds */
+        get: operations["listFeeds"];
+        put?: never;
+        /**
+         * Create Feed
+         * @description Subscribe, and fetch the feed once right away.
+         *
+         *     A feed that can't be fetched is still added, with `last_error` saying why.
+         */
+        post: operations["createFeed"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeds/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Feed Items
+         * @description Items from every feed, newest published first, each checked against the current rules.
+         */
+        get: operations["listFeedItems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeds/items/seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Feed Items Seen
+         * @description Mark exactly these items seen, e.g. the ones a list showed. Unknown ones are ignored.
+         */
+        post: operations["markFeedItemsSeen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeds/items/seen-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark All Feed Items Seen
+         * @description Mark every unseen item in a view seen ("Mark all seen"), up to `up_to`.
+         *
+         *     The view's `feed_id`, `match` and `q` apply, so items it hides stay new.
+         */
+        post: operations["markAllFeedItemsSeen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeds/items/{info_hash}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Feed Item */
+        get: operations["getFeedItem"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeds/items/{info_hash}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Download Feed Item
+         * @description Download an item. Answers 200 with the existing job if the torrent is already in Charon.
+         */
+        post: operations["downloadFeedItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeds/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Feed
+         * @description Fetch and read a feed without subscribing: its title, counts and newest items.
+         */
+        post: operations["previewFeed"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeds/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh All Feeds
+         * @description Fetch every enabled feed now; paused ones are skipped. Problems go in `last_error`.
+         */
+        post: operations["refreshAllFeeds"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeds/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Summarize Feeds
+         * @description How many items nobody has seen yet, in total and per feed.
+         */
+        get: operations["summarizeFeeds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeds/{feed_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Feed */
+        get: operations["getFeed"];
+        /**
+         * Update Feed
+         * @description Change a feed's settings. Changing its address (`url`) takes an admin key.
+         */
+        put: operations["updateFeed"];
+        post?: never;
+        /**
+         * Delete Feed
+         * @description Unsubscribe. Items only this feed listed are forgotten; downloads are untouched.
+         */
+        delete: operations["deleteFeed"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeds/{feed_id}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Feed
+         * @description Fetch the feed now. Problems are reported in `last_error`, not as an error response.
+         */
+        post: operations["refreshFeed"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feeds/{feed_id}/url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reveal Feed Url
+         * @description The feed's whole address, passkey included. Admins only.
+         */
+        get: operations["revealFeedUrl"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -197,7 +472,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Rules */
+        /**
+         * List Rules
+         * @description Every rule, in the order they are tried.
+         */
         get: operations["listRules"];
         put?: never;
         /** Create Rule */
@@ -228,6 +506,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/rules/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reorder Rules
+         * @description Put every rule in a new order at once; priorities are re-spaced 10, 20, 30…
+         *
+         *     Fails with 409 rules_changed if `ids` isn't exactly the current set of rules.
+         */
+        post: operations["reorderRules"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/rules/{rule_id}": {
         parameters: {
             query?: never;
@@ -237,7 +537,10 @@ export interface paths {
         };
         /** Get Rule */
         get: operations["getRule"];
-        /** Update Rule */
+        /**
+         * Update Rule
+         * @description Replace a rule. Send the `version` you loaded (or If-Match) to refuse a newer edit.
+         */
         put: operations["updateRule"];
         post?: never;
         /** Delete Rule */
@@ -251,6 +554,19 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * Actor
+         * @description Who made a change: whoever holds an API key, or Charon itself.
+         */
+        Actor: {
+            /**
+             * Key Id
+             * @description Null for Charon itself and the bootstrap key.
+             */
+            key_id?: string | null;
+            /** Name */
+            name: string;
+        };
         /** ApiKeyView */
         ApiKeyView: {
             /**
@@ -279,6 +595,14 @@ export interface components {
         DestinationRootsView: {
             /** Roots */
             roots: string[];
+        };
+        /** DownloadItemRequest */
+        DownloadItemRequest: {
+            /**
+             * Rule Id
+             * @description Force this rule.
+             */
+            rule_id?: string | null;
         };
         /** DownloadSummaryView */
         DownloadSummaryView: {
@@ -313,14 +637,275 @@ export interface components {
             details?: {
                 [key: string]: unknown;
             }[] | null;
+            /**
+             * Hint
+             * @description What to do about it, in plain language, when Charon knows.
+             */
+            hint?: string | null;
             /** Message */
             message: string;
+            /**
+             * Retryable
+             * @description Whether sending the same request again later may succeed.
+             * @default false
+             */
+            retryable: boolean;
         };
         /**
          * ErrorStage
          * @enum {string}
          */
         ErrorStage: "download" | "processing";
+        /** EventListView */
+        EventListView: {
+            /**
+             * Cursor
+             * @description Pass as `after` to get the events that happen next. Unchanged when nothing new matched.
+             */
+            cursor: number;
+            /** Items */
+            items: components["schemas"]["EventView"][];
+        };
+        /**
+         * EventType
+         * @enum {string}
+         */
+        EventType: "job.created" | "job.status_changed" | "rule.created" | "rule.updated" | "rule.deleted" | "rules.reordered" | "feed.created" | "feed.updated" | "feed.deleted" | "feed.health_changed" | "feed_item.added" | "feed_item.downloaded";
+        /** EventView */
+        EventView: {
+            actor: components["schemas"]["Actor"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Data */
+            data: {
+                [key: string]: unknown;
+            };
+            /**
+             * Id
+             * @description Increases with every event. Use the last one seen as `after`.
+             */
+            id: number;
+            /**
+             * Subject Id
+             * @description The job, rule, feed or feed item it is about.
+             */
+            subject_id: string;
+            type: components["schemas"]["EventType"];
+        };
+        /** FeedItemListView */
+        FeedItemListView: {
+            /** Items */
+            items: components["schemas"]["FeedItemView"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /** FeedItemView */
+        FeedItemView: {
+            /** Auto Downloaded */
+            auto_downloaded: boolean;
+            /**
+             * Auto Error
+             * @description Why auto-download couldn't start it, if it tried.
+             */
+            auto_error: string | null;
+            /**
+             * Feeds
+             * @description Every subscribed feed that lists it.
+             */
+            feeds: components["schemas"]["FeedRefView"][];
+            /**
+             * First Seen At
+             * Format: date-time
+             */
+            first_seen_at: string;
+            /** Info Hash */
+            info_hash: string;
+            /** @description The newest download of this torrent, however it was added. */
+            job: components["schemas"]["ItemJobView"] | null;
+            /** Magnet */
+            magnet: string;
+            /** @description The rule that would file it, if any. */
+            match: components["schemas"]["ItemMatchView"] | null;
+            /** @description Set when the matching rule can't be applied to this name. */
+            match_error: components["schemas"]["ProblemView"] | null;
+            /**
+             * Name
+             * @description What rules match: the magnet's name, else the item's title.
+             */
+            name: string;
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /**
+             * Published Estimated
+             * @description True when the feed gave no date and published_at is when Charon first saw it.
+             */
+            published_estimated: boolean;
+            /** Seen */
+            seen: boolean;
+            /** Size Bytes */
+            size_bytes: number | null;
+            /** Title */
+            title: string;
+        };
+        /** FeedPreviewRequest */
+        FeedPreviewRequest: {
+            /** Url */
+            url: string;
+        };
+        /** FeedPreviewView */
+        FeedPreviewView: {
+            /**
+             * Item Count
+             * @description Items with a magnet link.
+             */
+            item_count: number;
+            /**
+             * Items
+             * @description The newest few, checked against the rules.
+             */
+            items: components["schemas"]["FeedItemView"][];
+            /** Newest Published At */
+            newest_published_at: string | null;
+            /**
+             * Skipped Count
+             * @description Items without one, which Charon ignores.
+             */
+            skipped_count: number;
+            /** Title */
+            title: string | null;
+        };
+        /** FeedRefView */
+        FeedRefView: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * FeedSpec
+         * @description A feed as supplied by a client.
+         */
+        FeedSpec: {
+            /**
+             * Auto Download
+             * @description Download items that match a rule, if they appear after this is turned on.
+             * @default false
+             */
+            auto_download: boolean;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Name */
+            name: string;
+            /**
+             * Refresh Minutes
+             * @default 15
+             */
+            refresh_minutes: number;
+            /**
+             * Url
+             * @description The RSS address. It may hold a passkey, so Charon treats it as a secret.
+             */
+            url: string;
+        };
+        /** FeedSummaryView */
+        FeedSummaryView: {
+            /**
+             * Feeds
+             * @description Unseen items per feed id.
+             */
+            feeds: {
+                [key: string]: number;
+            };
+            /**
+             * Unread
+             * @description Unseen items across every feed, each counted once.
+             */
+            unread: number;
+        };
+        /** FeedUpdate */
+        FeedUpdate: {
+            /**
+             * Auto Download
+             * @description Download items that match a rule, if they appear after this is turned on.
+             * @default false
+             */
+            auto_download: boolean;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Name */
+            name: string;
+            /**
+             * Refresh Minutes
+             * @default 15
+             */
+            refresh_minutes: number;
+            /**
+             * Url
+             * @description A new address (admins only); omit to keep it.
+             */
+            url?: string | null;
+        };
+        /** FeedUrlView */
+        FeedUrlView: {
+            /** Url */
+            url: string;
+        };
+        /** FeedView */
+        FeedView: {
+            /** Auto Download */
+            auto_download: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            created_by: components["schemas"]["Actor"] | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Id */
+            id: string;
+            /** Last Checked At */
+            last_checked_at: string | null;
+            /** @description Null while the feed is healthy. */
+            last_error: components["schemas"]["ProblemView"] | null;
+            /** Name */
+            name: string;
+            /**
+             * Next Check At
+             * @description Null while the feed is disabled.
+             */
+            next_check_at: string | null;
+            /** Refresh Minutes */
+            refresh_minutes: number;
+            /**
+             * Title
+             * @description The feed's own title, from its last fetch.
+             */
+            title: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            updated_by: components["schemas"]["Actor"] | null;
+            /**
+             * Url
+             * @description The address with passkeys and tokens masked. Admins can read it whole at GET /feeds/{id}/url.
+             */
+            url: string;
+        };
         /** FolderListingView */
         FolderListingView: {
             /** Folders */
@@ -376,10 +961,36 @@ export interface components {
             revoked_at: string | null;
             role: components["schemas"]["Role"];
         };
-        /** JobError */
-        JobError: {
+        /** ItemJobView */
+        ItemJobView: {
+            /** Error Code */
+            error_code: string | null;
+            /** Id */
+            id: string;
+            /** Percent */
+            percent: number;
+            status: components["schemas"]["JobStatus"];
+        };
+        /** ItemMatchView */
+        ItemMatchView: {
+            /** Final Path */
+            final_path: string;
+            /** New Name */
+            new_name: string;
+            /** Rule Id */
+            rule_id: string;
+            /** Rule Name */
+            rule_name: string;
+        };
+        /** JobErrorView */
+        JobErrorView: {
             /** Code */
             code: string;
+            /**
+             * Hint
+             * @description What to do about it, in plain language.
+             */
+            hint: string | null;
             /** Message */
             message: string;
             stage: components["schemas"]["ErrorStage"];
@@ -405,9 +1016,16 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
-            error: components["schemas"]["JobError"] | null;
+            /** @description Who added it; null for jobs added before Charon recorded this. */
+            created_by: components["schemas"]["Actor"] | null;
+            error: components["schemas"]["JobErrorView"] | null;
             /** Id */
             id: string;
+            /**
+             * Info Hash
+             * @description Lowercase hex; the same for every magnet of a torrent.
+             */
+            info_hash: string | null;
             /** Magnet */
             magnet: string;
             /** Name */
@@ -421,6 +1039,48 @@ export interface components {
              */
             updated_at: string;
         };
+        /** MarkAllSeenRequest */
+        MarkAllSeenRequest: {
+            /**
+             * Feed Id
+             * @description Only this feed's items.
+             */
+            feed_id?: string | null;
+            /**
+             * @description Only items in this view.
+             * @default all
+             */
+            match: components["schemas"]["MatchFilter"];
+            /**
+             * Q
+             * @description Only names containing this.
+             */
+            q?: string | null;
+            /**
+             * Up To
+             * Format: date-time
+             * @description Only items Charon first saw at or before this time, e.g. when the list was loaded, so items that arrived since stay new.
+             */
+            up_to: string;
+        };
+        /** MarkSeenRequest */
+        MarkSeenRequest: {
+            /**
+             * Info Hashes
+             * @description The items to mark seen, e.g. the ones a list showed.
+             */
+            info_hashes: string[];
+        };
+        /** MarkSeenView */
+        MarkSeenView: {
+            /** Marked */
+            marked: number;
+        };
+        /**
+         * MatchFilter
+         * @enum {string}
+         */
+        MatchFilter: "all" | "matched" | "unmatched";
         /**
          * MatchType
          * @enum {string}
@@ -466,6 +1126,18 @@ export interface components {
             name: string;
             role: components["schemas"]["Role"];
         };
+        /** ProblemView */
+        ProblemView: {
+            /** Code */
+            code: string;
+            /**
+             * Hint
+             * @description What to do about it, in plain language.
+             */
+            hint: string | null;
+            /** Message */
+            message: string;
+        };
         /** ProcessingView */
         ProcessingView: {
             /** Final Path */
@@ -508,6 +1180,14 @@ export interface components {
              */
             replace: string;
         };
+        /** ReorderRulesRequest */
+        ReorderRulesRequest: {
+            /**
+             * Ids
+             * @description Every rule's id, in the new order, highest priority first.
+             */
+            ids: string[];
+        };
         /**
          * Role
          * @enum {string}
@@ -520,6 +1200,13 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            created_by?: components["schemas"]["Actor"] | null;
+            /**
+             * Description
+             * @description Why the rule exists, in plain words.
+             * @default
+             */
+            description: string;
             /** Destination */
             destination: string;
             /**
@@ -542,12 +1229,25 @@ export interface components {
             priority: number;
             /** Steps */
             steps?: components["schemas"]["RenameStep"][];
+            updated_by?: components["schemas"]["Actor"] | null;
+            /**
+             * Version
+             * @description Goes up by one on every change.
+             * @default 1
+             */
+            version: number;
         };
         /**
          * RuleSpec
          * @description A rule as supplied by a client, before it has an identity.
          */
         RuleSpec: {
+            /**
+             * Description
+             * @description Why the rule exists, in plain words.
+             * @default
+             */
+            description: string;
             /** Destination */
             destination: string;
             /**
@@ -568,6 +1268,40 @@ export interface components {
             priority: number;
             /** Steps */
             steps?: components["schemas"]["RenameStep"][];
+        };
+        /** RuleUpdate */
+        RuleUpdate: {
+            /**
+             * Description
+             * @description Why the rule exists, in plain words.
+             * @default
+             */
+            description: string;
+            /** Destination */
+            destination: string;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** @default glob */
+            match_type: components["schemas"]["MatchType"];
+            /** Name */
+            name: string;
+            /** Pattern */
+            pattern: string;
+            /**
+             * Priority
+             * @default 100
+             */
+            priority: number;
+            /** Steps */
+            steps?: components["schemas"]["RenameStep"][];
+            /**
+             * Version
+             * @description The version you loaded. If the rule has changed since, the save fails with 409 rule_changed instead of overwriting that change. Omit to overwrite.
+             */
+            version?: number | null;
         };
         /** SubmitDownloadRequest */
         SubmitDownloadRequest: {
@@ -997,7 +1731,10 @@ export interface operations {
     submitDownload: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Any unique string, e.g. a UUID. Repeating a request with the same key returns what the first one created (with status 200) instead of creating it again. Keys belong to the API key that sent them and are remembered for a day. */
+                "Idempotency-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1007,6 +1744,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Already in Charon */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobView"];
+                };
+            };
             /** @description Successful Response */
             202: {
                 headers: {
@@ -1018,6 +1764,15 @@ export interface operations {
             };
             /** @description Missing, invalid or revoked API key */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflicts with the resource's current state */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1257,6 +2012,785 @@ export interface operations {
             };
         };
     };
+    listEvents: {
+        parameters: {
+            query?: {
+                /** @description The `cursor` from the previous call. */
+                after?: number;
+                limit?: number;
+                /** @description Only these types. */
+                type?: components["schemas"]["EventType"][] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventListView"];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    listFeeds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedView"][];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    createFeed: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Any unique string, e.g. a UUID. Repeating a request with the same key returns what the first one created (with status 200) instead of creating it again. Keys belong to the API key that sent them and are remembered for a day. */
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedSpec"];
+            };
+        };
+        responses: {
+            /** @description Repeated request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedView"];
+                };
+            };
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedView"];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflicts with the resource's current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    listFeedItems: {
+        parameters: {
+            query?: {
+                feed_id?: string | null;
+                match?: components["schemas"]["MatchFilter"];
+                /** @description Only items nobody has seen yet. */
+                unseen?: boolean;
+                /** @description Text the name contains. */
+                q?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedItemListView"];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    markFeedItemsSeen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkSeenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkSeenView"];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    markAllFeedItemsSeen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkAllSeenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkSeenView"];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    getFeedItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                info_hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedItemView"];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    downloadFeedItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                info_hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DownloadItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Already in Charon */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobView"];
+                };
+            };
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobView"];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The download backend failed or is unreachable */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    previewFeed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedPreviewView"];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    refreshAllFeeds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedView"][];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    summarizeFeeds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedSummaryView"];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    getFeed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                feed_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedView"];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    updateFeed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                feed_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedView"];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The key's role does not allow this action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    deleteFeed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                feed_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    refreshFeed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                feed_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedView"];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    revealFeedUrl: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                feed_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedUrlView"];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The key's role does not allow this action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     getHealth: {
         parameters: {
             query?: never;
@@ -1318,7 +2852,10 @@ export interface operations {
     createRule: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Any unique string, e.g. a UUID. Repeating a request with the same key returns what the first one created (with status 200) instead of creating it again. Keys belong to the API key that sent them and are remembered for a day. */
+                "Idempotency-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1328,6 +2865,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Repeated request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Rule"];
+                };
+            };
             /** @description Successful Response */
             201: {
                 headers: {
@@ -1339,6 +2885,15 @@ export interface operations {
             };
             /** @description Missing, invalid or revoked API key */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflicts with the resource's current state */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1390,6 +2945,57 @@ export interface operations {
             };
             /** @description Resource not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    reorderRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderRulesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Rule"][];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflicts with the resource's current state */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1460,7 +3066,10 @@ export interface operations {
     updateRule: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The rule's ETag, e.g. "3": an alternative to sending `version`. */
+                "If-Match"?: string | null;
+            };
             path: {
                 rule_id: string;
             };
@@ -1468,7 +3077,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RuleSpec"];
+                "application/json": components["schemas"]["RuleUpdate"];
             };
         };
         responses: {
@@ -1492,6 +3101,15 @@ export interface operations {
             };
             /** @description Resource not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflicts with the resource's current state */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

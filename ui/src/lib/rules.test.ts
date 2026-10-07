@@ -1,5 +1,5 @@
 import { makeRule } from "@/test/factories";
-import { emptySpec, isPreviewable, moveItem, nextPriority, priorityChanges, toSpec } from "./rules";
+import { emptySpec, isPreviewable, moveItem, nextPriority, toSpec, toUpdate } from "./rules";
 
 describe("moveItem", () => {
   it.each([
@@ -9,30 +9,6 @@ describe("moveItem", () => {
     [5, 0, ["a", "b", "c"]],
   ])("%i -> %i", (from, to, expected) => {
     expect(moveItem(["a", "b", "c"], from, to)).toEqual(expected);
-  });
-});
-
-describe("priorityChanges", () => {
-  const rule = (id: string, priority: number) => makeRule({ id, priority });
-
-  it.each([
-    [[rule("a", 10), rule("b", 20)], []],
-    [
-      [rule("b", 20), rule("a", 10)],
-      [
-        ["b", 10],
-        ["a", 20],
-      ],
-    ],
-    [
-      [rule("a", 5), rule("b", 5), rule("c", 30)],
-      [
-        ["a", 10],
-        ["b", 20],
-      ],
-    ],
-  ])("case %#", (ordered, expected) => {
-    expect(priorityChanges(ordered).map((c) => [c.rule.id, c.priority])).toEqual(expected);
   });
 });
 
@@ -55,6 +31,7 @@ describe("toSpec", () => {
   ])("drops identity fields (%s)", (_label, rule, steps) => {
     expect(toSpec(rule)).toEqual({
       name: "TV",
+      description: "",
       priority: 10,
       enabled: true,
       match_type: "glob",
@@ -62,6 +39,17 @@ describe("toSpec", () => {
       steps,
       destination: "/library/tv",
     });
+  });
+});
+
+describe("toUpdate", () => {
+  it.each([
+    ["as loaded", {}, { enabled: true, version: 4 }],
+    ["with a change", { enabled: false }, { enabled: false, version: 4 }],
+  ])("carries the loaded version (%s)", (_label, patch, expected) => {
+    const update = toUpdate(makeRule({ version: 4, description: "why" }), patch);
+    expect(update).toMatchObject({ ...expected, description: "why", name: "TV" });
+    expect(update).not.toHaveProperty("id");
   });
 });
 

@@ -1,4 +1,4 @@
-import type { ApiKey, Job, Principal, Rule } from "@/api/types";
+import type { ApiKey, Feed, FeedItem, Job, Principal, Rule } from "@/api/types";
 
 const T0 = "2026-10-04T12:00:00Z";
 
@@ -17,6 +17,8 @@ export function makeJob(overrides: Partial<Job> = {}): Job {
     },
     processing: { rule_id: null, final_path: null },
     error: null,
+    info_hash: null,
+    created_by: null,
     created_at: T0,
     updated_at: T0,
     completed_at: null,
@@ -28,6 +30,7 @@ export function makeRule(overrides: Partial<Rule> = {}): Rule {
   return {
     id: "rule-1",
     name: "TV",
+    description: "",
     priority: 10,
     enabled: true,
     match_type: "glob",
@@ -35,6 +38,9 @@ export function makeRule(overrides: Partial<Rule> = {}): Rule {
     steps: [],
     destination: "/library/tv",
     created_at: T0,
+    version: 1,
+    created_by: null,
+    updated_by: null,
     ...overrides,
   };
 }
@@ -47,6 +53,52 @@ export function makeKey(overrides: Partial<ApiKey> = {}): ApiKey {
     prefix: "chk_abcdefgh",
     created_at: T0,
     revoked_at: null,
+    ...overrides,
+  };
+}
+
+export function makeFeed(overrides: Partial<Feed> = {}): Feed {
+  return {
+    id: "feed-1",
+    name: "TV",
+    url: "https://tracker.example/rss?passkey=••••",
+    enabled: true,
+    refresh_minutes: 15,
+    auto_download: false,
+    title: "Tracker · TV",
+    created_at: T0,
+    updated_at: T0,
+    created_by: null,
+    updated_by: null,
+    last_checked_at: T0,
+    next_check_at: "2026-10-04T12:15:00Z",
+    last_error: null,
+    ...overrides,
+  };
+}
+
+export function makeFeedItem(overrides: Partial<FeedItem> = {}): FeedItem {
+  return {
+    info_hash: "a".repeat(40),
+    name: "Some.Show.S01E02.1080p.mkv",
+    title: "Some Show S01E02 1080p",
+    magnet: `magnet:?xt=urn:btih:${"a".repeat(40)}&dn=Some.Show.S01E02.1080p.mkv`,
+    size_bytes: 1_500_000_000,
+    published_at: T0,
+    published_estimated: false,
+    first_seen_at: T0,
+    seen: false,
+    feeds: [{ id: "feed-1", name: "TV" }],
+    match: {
+      rule_id: "rule-1",
+      rule_name: "TV",
+      new_name: "Some.Show.S01E02.mkv",
+      final_path: "/library/tv/Some.Show.S01E02.mkv",
+    },
+    match_error: null,
+    job: null,
+    auto_downloaded: false,
+    auto_error: null,
     ...overrides,
   };
 }

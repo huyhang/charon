@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
+import { FakeFeedsSection } from "./FakeFeedsSection";
 import { createHttpSimulator, taskPercent, type SimulatorClient } from "./simulatorClient";
 
 const FAILURE_DETAIL = "broken_link";
@@ -59,7 +60,11 @@ export default function SimulatorPanel({
           <FlaskConicalIcon className="size-3.5" /> Simulator
         </button>
       </PopoverTrigger>
-      <PopoverContent side="top" align="start" className="w-[min(24rem,calc(100vw-2rem))] p-0">
+      <PopoverContent
+        side="top"
+        align="start"
+        className="max-h-[calc(100dvh-6rem)] w-[min(24rem,calc(100vw-2rem))] overflow-y-auto p-0"
+      >
         <div className="flex items-center justify-between border-b px-4 py-3">
           <div>
             <p className="text-sm font-medium">Fake Download Station</p>
@@ -123,6 +128,7 @@ export default function SimulatorPanel({
             ))}
           </ul>
         </div>
+        <FakeFeedsSection simulator={simulator} open={open} />
         <div className="grid grid-cols-2 gap-2 border-t p-2">
           <Button
             size="sm"

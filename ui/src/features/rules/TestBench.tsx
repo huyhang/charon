@@ -70,9 +70,9 @@ function Result({ spec, name }: { spec: RuleSpec; name: string }) {
 }
 
 /** Runs the unsaved draft on the server against a sample name, as you type. */
-export function TestBench({ spec }: { spec: RuleSpec }) {
+export function TestBench({ spec, initialName = "" }: { spec: RuleSpec; initialName?: string }) {
   const samples = useSampleNames();
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName);
   const listId = useId();
   const sample = name || samples[0] || "";
 

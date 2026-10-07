@@ -34,6 +34,8 @@ class Stack:
     fake: httpx.Client
     library_local: Path
     library_service: str
+    # The fake's address as Charon reaches it, for subscribing to its feeds.
+    fake_service: str
 
 
 @pytest.fixture(scope="session")
@@ -47,11 +49,18 @@ def stack(tmp_path_factory) -> Iterator[Stack]:
 def _external_stack() -> Iterator[Stack]:
     library = os.environ.get("E2E_LIBRARY_DIR", "var/library")
     headers = {"X-API-Key": os.environ.get("CHARON_E2E_API_KEY", "")}
+    fake_url = os.environ.get("FAKE_DS_E2E_URL", "http://localhost:5000")
     with (
         httpx.Client(base_url=os.environ["CHARON_E2E_URL"] + API_PREFIX, headers=headers) as charon,
-        httpx.Client(base_url=os.environ.get("FAKE_DS_E2E_URL", "http://localhost:5000")) as fake,
+        httpx.Client(base_url=fake_url) as fake,
     ):
-        yield Stack(charon, fake, Path(library), os.environ.get("E2E_LIBRARY_DIR_SERVICE", library))
+        yield Stack(
+            charon,
+            fake,
+            Path(library),
+            os.environ.get("E2E_LIBRARY_DIR_SERVICE", library),
+            os.environ.get("FAKE_DS_E2E_URL_SERVICE", fake_url),
+        )
 
 
 def _in_process_stack(root: Path) -> Iterator[Stack]:
@@ -75,7 +84,7 @@ def _in_process_stack(root: Path) -> Iterator[Stack]:
         httpx.Client(base_url=charon_url + API_PREFIX, headers={"X-API-Key": API_KEY}) as charon,
         httpx.Client(base_url=fake_url) as fake,
     ):
-        yield Stack(charon, fake, library, str(library))
+        yield Stack(charon, fake, library, str(library), fake_url)
 
 
 def _serve(app: FastAPI) -> str:

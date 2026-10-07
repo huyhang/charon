@@ -5,7 +5,7 @@ from pathlib import PurePosixPath
 
 import pytest
 
-from charon.domain.models import ErrorStage, JobStatus, Progress
+from charon.domain.models import SYSTEM, ErrorStage, JobStatus, Progress
 from charon.errors import DownloaderError
 from charon.ports.downloader import BackendStatus, BackendTask
 from charon.services.post_processor import PostProcessor
@@ -19,6 +19,7 @@ from tests.unit.fakes import (
     FakeFileOps,
     InMemoryJobStore,
     InMemoryRuleStore,
+    RecordingEventLog,
     make_job,
 )
 
@@ -99,13 +100,15 @@ class Harness:
         self.files = FakeFileOps(["/downloads/Show.mkv"])
         processor = PostProcessor(
             self.jobs,
-            RuleService(InMemoryRuleStore(), ALLOW_ALL),
+            RuleService(InMemoryRuleStore(), ALLOW_ALL, RecordingEventLog()),
             self.downloader,
             self.files,
             PurePosixPath("/downloads"),
             ALLOW_ALL,
+            RecordingEventLog(),
         )
-        self.watcher = Watcher(self.jobs, self.downloader, processor, clock=FakeClock())
+        self.events = RecordingEventLog()
+        self.watcher = Watcher(self.jobs, self.downloader, processor, self.events, FakeClock())
 
 
 def test_tick_syncs_and_processes_finished_download_in_one_pass() -> None:
@@ -114,6 +117,31 @@ def test_tick_syncs_and_processes_finished_download_in_one_pass() -> None:
     h.watcher.tick()
     job = h.jobs.jobs["job-1"]
     assert (job.status, job.final_path) == (JobStatus.DONE, "/downloads/Show.mkv")
+
+
+@pytest.mark.parametrize(
+    ("backend", "events"),
+    [
+        (task(BackendStatus.WAITING), []),
+        (task(BackendStatus.DOWNLOADING, downloaded_bytes=5), [JobStatus.DOWNLOADING]),
+        (task(BackendStatus.ERROR, error_message="dead"), [JobStatus.FAILED]),
+    ],
+    ids=["unchanged", "started", "failed"],
+)
+def test_tick_records_each_status_change(backend: BackendTask, events: list) -> None:
+    h = Harness(make_job(status=JobStatus.QUEUED))
+    h.downloader.tasks["task-1"] = backend
+    h.watcher.tick()
+    assert [e.data["status"] for e in h.events.recorded] == events
+    assert all(e.actor == SYSTEM for e in h.events.recorded)
+
+
+def test_tick_records_nothing_when_another_worker_saved_first() -> None:
+    h = Harness(make_job(status=JobStatus.QUEUED))
+    h.downloader.tasks["task-1"] = task(BackendStatus.DOWNLOADING)
+    h.jobs.update = lambda job, expected: False
+    h.watcher.tick()
+    assert h.events.recorded == []
 
 
 def test_tick_ignores_terminal_jobs() -> None:

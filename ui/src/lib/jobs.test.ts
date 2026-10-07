@@ -97,7 +97,7 @@ describe("timeline", () => {
   const states = (status: JobStatus, stage?: "download" | "processing") =>
     timeline({
       status,
-      error: stage ? { stage, code: "x", message: "x" } : null,
+      error: stage ? { stage, code: "x", message: "x", hint: null } : null,
     }).map((step) => step.state);
 
   it.each<[JobStatus, "download" | "processing" | undefined, string[]]>([

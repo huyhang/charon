@@ -8,13 +8,16 @@ from urllib.parse import parse_qs
 from fastapi import FastAPI, Request
 
 from fake_ds.control import router as control_router
+from fake_ds.feed_routes import router as feed_router
+from fake_ds.feeds import FakeFeeds
 from fake_ds.simulator import Simulator
 from fake_ds.station import FakeStation, Params, dispatch
 
 
-def create_app(station: FakeStation) -> FastAPI:
+def create_app(station: FakeStation, feeds: FakeFeeds | None = None) -> FastAPI:
     app = FastAPI(title="Fake Download Station")
     app.state.station = station
+    app.state.feeds = feeds or FakeFeeds()
 
     @app.api_route("/webapi/{path:path}", methods=["GET", "POST"])
     async def web_api(path: str, request: Request) -> dict[str, Any]:
@@ -24,6 +27,7 @@ def create_app(station: FakeStation) -> FastAPI:
         return dispatch(station, path, params)
 
     app.include_router(control_router)
+    app.include_router(feed_router)
     return app
 
 

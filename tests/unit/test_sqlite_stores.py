@@ -1,14 +1,21 @@
 import sqlite3
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
 from charon.adapters.sqlite.api_key_store import SqliteApiKeyStore
-from charon.adapters.sqlite.database import Database
+from charon.adapters.sqlite.database import SCHEMA, Database, sortable_time
+from charon.adapters.sqlite.event_store import SqliteEventStore
+from charon.adapters.sqlite.idempotency_store import SqliteIdempotencyStore
 from charon.adapters.sqlite.job_store import SqliteJobStore
+from charon.adapters.sqlite.migrations import MIGRATIONS
 from charon.adapters.sqlite.rule_store import SqliteRuleStore
-from charon.domain.models import ApiKey, JobStatus, Role
-from tests.unit.fakes import T0, make_job, make_rule
+from charon.domain.events import Event, EventType
+from charon.domain.models import SYSTEM, ApiKey, IdempotencyRecord, JobStatus, Role
+from tests.unit.fakes import T0, InMemoryEventStore, make_job, make_rule
+
+HASH_A = "c12fe1c06bba254a9dc9f519b335aa7c1367a88a"
+HASH_B = "b" * 40
 
 
 @pytest.fixture
@@ -86,9 +93,10 @@ def test_rule_crud(db) -> None:
     store.add(make_rule(id="b", priority=2))
     store.add(make_rule(id="a", priority=1))
     assert [r.id for r in store.list()] == ["a", "b"]
-    assert store.update(make_rule(id="a", priority=3)) is True
+    assert store.update(make_rule(id="a", priority=3, version=2), expected_version=1) is True
     assert [r.id for r in store.list()] == ["b", "a"]
-    assert store.update(make_rule(id="zzz")) is False
+    assert store.get("a").version == 2
+    assert store.update(make_rule(id="zzz"), expected_version=1) is False
     assert store.delete("a") is True
     assert store.delete("a") is False
     assert store.get("a") is None
@@ -106,6 +114,140 @@ def test_rule_list_breaks_priority_ties_by_creation_time(db, insert_order: list[
     for rule_id in insert_order:
         store.add(rules[rule_id])
     assert [r.id for r in store.list()] == ["old", "new", "same"]
+
+
+@pytest.mark.parametrize(("expected_version", "saved"), [(1, True), (2, False)])
+def test_rule_update_checks_version(db, expected_version: int, saved: bool) -> None:
+    store = SqliteRuleStore(db)
+    store.add(make_rule(id="a"))
+    renamed = make_rule(id="a", name="renamed", version=2)
+    assert store.update(renamed, expected_version=expected_version) is saved
+    assert store.get("a").name == ("renamed" if saved else "rule")
+
+
+def test_rule_update_all_is_all_or_nothing(db) -> None:
+    store = SqliteRuleStore(db)
+    store.add(make_rule(id="a", priority=1))
+    store.add(make_rule(id="b", priority=2, version=5))
+    moved = [make_rule(id="a", priority=3, version=2)]
+    for stale in ({"a": 1, "b": 1}, {"a": 1}, {"a": 1, "b": 5, "c": 1}):
+        assert store.update_all(moved, stale) is False
+    assert [(r.id, r.priority) for r in store.list()] == [("a", 1), ("b", 2)]
+    assert store.update_all(moved, {"a": 1, "b": 5}) is True
+    assert [(r.id, r.priority, r.version) for r in store.list()] == [("b", 2, 5), ("a", 3, 2)]
+
+
+@pytest.mark.parametrize(
+    ("hashes", "expected"),
+    [
+        ([], {}),
+        ([HASH_B], {}),
+        ([HASH_A], {HASH_A: "newer"}),
+        ([HASH_A, HASH_B], {HASH_A: "newer"}),
+    ],
+    ids=["none", "unknown", "newest-wins", "mixed"],
+)
+def test_job_latest_by_hash(db, hashes: list[str], expected: dict) -> None:
+    store = SqliteJobStore(db)
+    magnet = f"magnet:?xt=urn:btih:{HASH_A}"
+    store.add(make_job(id="older", magnet=magnet, status=JobStatus.CANCELLED))
+    store.add(make_job(id="newer", magnet=magnet, created_at=T0 + timedelta(seconds=1)))
+    store.add(make_job(id="other"))
+    found = store.latest_by_hash(hashes)
+    assert {h: job.id for h, job in found.items()} == expected
+
+
+# The in-memory fake must behave like the real store, so both run the same checks.
+@pytest.fixture(params=["sqlite", "memory"])
+def event_store(request, db):
+    return SqliteEventStore(db) if request.param == "sqlite" else InMemoryEventStore()
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (
+            datetime(2026, 10, 1, 14, tzinfo=timezone(timedelta(hours=2))),
+            "2026-10-01T12:00:00.000000Z",
+        ),
+        (datetime(999, 1, 1, tzinfo=UTC), "0999-01-01T00:00:00.000000Z"),
+    ],
+    ids=["converted-to-utc", "padded-year"],
+)
+def test_sortable_time_is_fixed_width_utc(value: datetime, expected: str) -> None:
+    assert sortable_time(value) == expected
+
+
+def _event(type: EventType, seconds: int = 0) -> Event:
+    return Event(
+        type=type, subject_id="s", actor=SYSTEM, created_at=T0 + timedelta(seconds=seconds)
+    )
+
+
+@pytest.mark.parametrize(
+    ("after", "limit", "types", "expected"),
+    [
+        (0, 10, None, [1, 2, 3]),
+        (1, 10, None, [2, 3]),
+        (0, 2, None, [1, 2]),
+        (0, 10, [EventType.RULE_CREATED], [2]),
+        (3, 10, None, []),
+    ],
+    ids=["all", "after-cursor", "limited", "by-type", "caught-up"],
+)
+def test_event_store_lists_oldest_first_after_cursor(
+    event_store, after, limit, types, expected
+) -> None:
+    store = event_store
+    for type in (EventType.JOB_CREATED, EventType.RULE_CREATED, EventType.JOB_STATUS_CHANGED):
+        store.append(_event(type))
+    assert [e.id for e in store.list(after, limit, types)] == expected
+
+
+def test_event_store_never_reuses_ids_after_pruning(event_store) -> None:
+    store = event_store
+    old = store.append(_event(EventType.JOB_CREATED))
+    assert store.prune(T0 + timedelta(seconds=1)) == 1
+    new = store.append(_event(EventType.JOB_CREATED, seconds=2))
+    assert (old.id, new.id) == (1, 2)
+    assert [e.id for e in store.list(0, 10)] == [2]
+
+
+def test_idempotency_store_keeps_first_record_and_prunes(db) -> None:
+    store = SqliteIdempotencyStore(db)
+    first = IdempotencyRecord(
+        scope="downloads", key="k", fingerprint="f", resource_id="job-1", created_at=T0
+    )
+    store.add(first)
+    store.add(first.model_copy(update={"resource_id": "job-2"}))
+    assert store.get("downloads", "k") == first
+    assert store.get("rules", "k") is None
+    assert store.prune(T0 + timedelta(seconds=1)) == 1
+    assert store.get("downloads", "k") is None
+
+
+def test_migrations_upgrade_a_first_release_database(tmp_path) -> None:
+    path = tmp_path / "charon.db"
+    conn = sqlite3.connect(path)
+    conn.executescript(SCHEMA)
+    job = make_job(magnet=f"magnet:?xt=urn:btih:{HASH_A.upper()}")
+    conn.execute(
+        "INSERT INTO jobs (id, status, created_at, data) VALUES (?, ?, ?, ?)",
+        (job.id, job.status, "2026-10-01", job.model_dump_json()),
+    )
+    conn.execute(
+        "INSERT INTO rules (id, priority, created_at, data) VALUES (?, ?, ?, ?)",
+        ("r", 1, "2026-10-01", make_rule(id="r").model_dump_json(exclude={"version"})),
+    )
+    conn.commit()
+    conn.close()
+
+    db = Database(path)
+    assert SqliteJobStore(db).latest_by_hash([HASH_A])[HASH_A].id == job.id
+    assert SqliteRuleStore(db).update(make_rule(id="r", version=2), expected_version=1)
+    with db.transaction() as c:
+        assert c.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
+    db.close()
 
 
 def test_data_survives_reopen(tmp_path) -> None:

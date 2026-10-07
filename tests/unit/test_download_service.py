@@ -1,6 +1,10 @@
+import base64
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 
-from charon.domain.models import ErrorStage, JobError, JobStatus
+from charon.domain.events import EventType
+from charon.domain.models import Actor, ErrorStage, JobError, JobStatus
 from charon.errors import ConflictError, DownloaderError, InvalidInputError, NotFoundError
 from charon.services.download_service import DownloadService, decode_cursor, encode_cursor
 from charon.services.rule_service import RuleService
@@ -8,14 +12,21 @@ from tests.unit.fakes import (
     ALLOW_ALL,
     FakeClock,
     FakeDownloader,
+    HeldAdds,
     InMemoryJobStore,
     InMemoryRuleStore,
+    Recorded,
+    RecordingEventLog,
     SequentialIds,
     make_job,
     make_rule,
 )
 
 MAGNET = "magnet:?xt=urn:btih:abc"
+HASH = "c12fe1c06bba254a9dc9f519b335aa7c1367a88a"
+HASH_BASE32 = "YEX6DQDLXISUVHOJ6UM3GNNKPQJWPKEK"
+HASHED = f"magnet:?xt=urn:btih:{HASH}"
+PHONE = Actor(name="phone", key_id="key-1")
 
 
 class Harness:
@@ -24,10 +35,12 @@ class Harness:
         self.rules = InMemoryRuleStore([make_rule(id="rule-1")])
         self.downloader = FakeDownloader()
         self.clock = FakeClock()
+        self.events = RecordingEventLog()
         self.service = DownloadService(
             self.jobs,
-            RuleService(self.rules, ALLOW_ALL),
+            RuleService(self.rules, ALLOW_ALL, RecordingEventLog()),
             self.downloader,
+            self.events,
             clock=self.clock,
             new_id=SequentialIds("job"),
         )
@@ -35,7 +48,9 @@ class Harness:
 
 def test_submit_creates_queued_job() -> None:
     h = Harness()
-    job = h.service.submit(MAGNET, "rule-1")
+    submission = h.service.submit(MAGNET, "rule-1")
+    job = submission.job
+    assert submission.created is True
     assert (job.id, job.status, job.backend_task_id, job.forced_rule_id) == (
         "job-1",
         JobStatus.QUEUED,
@@ -60,6 +75,90 @@ def test_submit_rejects_invalid_input(magnet: str, rule_id: str | None, code: st
         h.service.submit(magnet, rule_id)
     assert exc_info.value.code == code
     assert h.downloader.added == []
+
+
+def test_submit_credits_the_actor_and_records_an_event() -> None:
+    h = Harness()
+    job = h.service.submit(f"{HASHED}&dn=Show.mkv", actor=PHONE).job
+    assert job.created_by == PHONE
+    assert h.events.recorded == [
+        Recorded(EventType.JOB_CREATED, "job-1", PHONE, {"name": "Show.mkv", "info_hash": HASH})
+    ]
+
+
+@pytest.mark.parametrize(
+    ("existing_status", "magnet", "created"),
+    [
+        (JobStatus.DOWNLOADING, HASHED, False),
+        (JobStatus.DONE, f"{HASHED}&dn=Other.Name&tr=udp://tracker", False),
+        (JobStatus.DONE, f"magnet:?xt=urn:btih:{HASH_BASE32}", False),
+        (JobStatus.DONE, HASHED.replace("magnet:?", "MAGNET:?"), False),
+        (JobStatus.CANCELLED, HASHED, True),
+        (JobStatus.FAILED, HASHED, True),
+        (JobStatus.DONE, "magnet:?xt=urn:btih:" + "d" * 40, True),
+    ],
+    ids=[
+        "in-flight",
+        "other-params",
+        "base32-form",
+        "upper-case-scheme",
+        "cancelled-starts-afresh",
+        "failed-starts-afresh",
+        "different-torrent",
+    ],
+)
+def test_submit_returns_existing_job_for_the_same_torrent(
+    existing_status: JobStatus, magnet: str, created: bool
+) -> None:
+    h = Harness(make_job(id="old", magnet=HASHED, status=existing_status))
+    submission = h.service.submit(magnet)
+    assert submission.created is created
+    assert (submission.job.id == "old") is not created
+    assert len(h.downloader.added) == (1 if created else 0)
+
+
+@pytest.mark.parametrize(
+    ("forced", "requested", "conflict"),
+    [(None, "rule-1", True), ("rule-1", "rule-1", False), ("rule-1", None, False)],
+    ids=["another-rule", "same-rule", "no-rule-asked"],
+)
+def test_submit_never_ignores_a_rule_for_a_torrent_already_in_charon(
+    forced: str | None, requested: str | None, conflict: bool
+) -> None:
+    h = Harness(make_job(id="old", magnet=HASHED, forced_rule_id=forced))
+    if not conflict:
+        assert h.service.submit(HASHED, requested).job.id == "old"
+        return
+    with pytest.raises(ConflictError) as exc_info:
+        h.service.submit(HASHED, requested)
+    assert (exc_info.value.code, exc_info.value.details) == ("torrent_exists", {"job_id": "old"})
+
+
+def test_submit_normalizes_an_upper_case_magnet() -> None:
+    h = Harness()
+    job = h.service.submit(HASHED.replace("magnet:?", "MAGNET:?")).job
+    assert (job.magnet, h.downloader.added) == (HASHED, [HASHED])
+
+
+def test_simultaneous_submits_of_one_torrent_start_it_once() -> None:
+    h = Harness()
+    adds = HeldAdds(h.downloader)
+    with ThreadPoolExecutor(2) as pool:
+        first = pool.submit(h.service.submit, HASHED)
+        assert adds.wait_for(1, timeout=5)
+        second = pool.submit(h.service.submit, HASHED)
+        # Unchecked, the second submission would reach the downloader too: give it time to.
+        adds.wait_for(2, timeout=0.3)
+        adds.release()
+        submissions = [first.result(), second.result()]
+    assert [s.created for s in submissions] == [True, False]
+    assert len(h.jobs.jobs) == 1
+
+
+def test_latest_by_hash_skips_the_store_for_no_hashes() -> None:
+    h = Harness(make_job(magnet=HASHED))
+    assert h.service.latest_by_hash([]) == {}
+    assert h.service.latest_by_hash([HASH])[HASH].id == "job-1"
 
 
 def test_submit_propagates_downloader_failure_without_persisting() -> None:
@@ -130,7 +229,15 @@ def test_cursor_round_trip() -> None:
     assert decode_cursor(encode_cursor(job)) == (job.created_at, job.id)
 
 
-@pytest.mark.parametrize("cursor", ["!!!", "bm90LWEtY3Vyc29y"])
+@pytest.mark.parametrize(
+    "cursor",
+    [
+        "!!!",
+        "bm90LWEtY3Vyc29y",
+        base64.urlsafe_b64encode(b"0001-01-01T00:00:00+01:00|job").decode(),
+    ],
+    ids=["not-base64", "no-separator", "out-of-range-time"],
+)
 def test_decode_cursor_rejects_garbage(cursor: str) -> None:
     with pytest.raises(InvalidInputError):
         decode_cursor(cursor)
@@ -154,6 +261,19 @@ def test_cancel_rejects_non_cancellable_job(status: JobStatus) -> None:
         h.service.cancel("job-1")
 
 
+def test_cancel_records_who_cancelled() -> None:
+    h = Harness(make_job(status=JobStatus.DOWNLOADING, name="Show.mkv"))
+    h.service.cancel("job-1", PHONE)
+    assert h.events.recorded == [
+        Recorded(
+            EventType.JOB_STATUS_CHANGED,
+            "job-1",
+            PHONE,
+            {"status": JobStatus.CANCELLED, "previous": JobStatus.DOWNLOADING, "name": "Show.mkv"},
+        )
+    ]
+
+
 def test_cancel_succeeds_even_if_backend_removal_fails() -> None:
     h = Harness(make_job())
     h.downloader.fail_with = DownloaderError("down")
@@ -166,6 +286,18 @@ def test_retry_processing_failure_requeues_processing() -> None:
     job = h.service.retry("job-1")
     assert (job.status, job.error, job.rule_id) == (JobStatus.COMPLETED, None, None)
     assert h.downloader.added == []
+
+
+def test_retry_records_who_retried() -> None:
+    error = JobError(stage=ErrorStage.DOWNLOAD, code="backend_error", message="x")
+    h = Harness(make_job(status=JobStatus.FAILED, error=error))
+    h.service.retry("job-1", PHONE)
+    [event] = h.events.recorded
+    assert (event.actor, event.data["status"], event.data["previous"]) == (
+        PHONE,
+        JobStatus.QUEUED,
+        JobStatus.FAILED,
+    )
 
 
 def test_retry_download_failure_replaces_backend_task() -> None:

@@ -113,11 +113,13 @@ def test_download_failure_then_retry(stack: Stack) -> None:
 
     failed = wait_for(stack, job["id"], TERMINAL)
     assert failed["status"] == "failed"
-    assert failed["error"] == {
-        "stage": "download",
-        "code": "backend_error",
-        "message": "tracker_down",
-    }
+    error = failed["error"]
+    assert (error["stage"], error["code"], error["message"]) == (
+        "download",
+        "backend_error",
+        "tracker_down",
+    )
+    assert error["hint"]
 
     assert stack.charon.post(f"/downloads/{job['id']}/retry").status_code == 202
     assert all(t["id"] != failed_task_id for t in stack.fake.get("/_control/tasks").json())

@@ -15,9 +15,12 @@ const ANONYMOUS: Principal = {
 const MAGNET = "magnet:?xt=urn:btih:abc&dn=The.Bear.S03E01.mkv";
 
 /** The shell as users meet it: the whole app, signed in as `principal`, opened at `url`. */
-async function renderShell(url = "/downloads", principal: Principal = ADMIN) {
+async function renderShell(url = "/downloads", principal: Principal = ADMIN, unread = 0) {
   window.history.replaceState(null, "", url);
-  const client = createFakeClient({ me: async () => principal });
+  const client = createFakeClient({
+    me: async () => principal,
+    feedSummary: async () => ({ unread, feeds: {} }),
+  });
   render(<App client={client} keys={memoryStore("dev-key")} themeStore={memoryStore()} />);
   await screen.findByRole("navigation", { name: "Main" });
   return client;
@@ -36,13 +39,30 @@ function pasteOnPage(text: string) {
 
 describe("AppShell", () => {
   it.each<[string, Principal, string[]]>([
-    ["admin", ADMIN, ["Downloads", "Rules", "API keys"]],
-    ["client", CLIENT, ["Downloads", "Rules"]],
-    ["auth disabled", ANONYMOUS, ["Downloads", "Rules"]],
+    ["admin", ADMIN, ["Downloads", "Feeds", "Rules", "API keys"]],
+    ["client", CLIENT, ["Downloads", "Feeds", "Rules"]],
+    ["auth disabled", ANONYMOUS, ["Downloads", "Feeds", "Rules"]],
   ])("%s sees these pages in both navigations", async (_label, principal, expected) => {
     await renderShell("/downloads", principal);
     expect(links("Main")).toEqual(expected);
     expect(links("Main mobile")).toEqual(expected);
+  });
+
+  it("shows how many feed items are new, in both navigations", async () => {
+    await renderShell("/downloads", ADMIN, 4);
+    for (const nav of ["Main", "Main mobile"]) {
+      const feeds = within(screen.getByRole("navigation", { name: nav })).getByRole("link", {
+        name: /Feeds/,
+      });
+      await waitFor(() => expect(within(feeds).getByLabelText("4 new")).toBeInTheDocument());
+    }
+  });
+
+  it("opens the feed inbox", async () => {
+    await renderShell("/downloads");
+    const main = within(screen.getByRole("navigation", { name: "Main" }));
+    await userEvent.click(main.getByRole("link", { name: "Feeds" }));
+    expect(await screen.findByRole("heading", { name: "Feeds" })).toBeInTheDocument();
   });
 
   it("marks the current page and moves between pages", async () => {

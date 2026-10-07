@@ -2,10 +2,14 @@ from fastapi import Depends, Request, Security
 from fastapi.security import APIKeyHeader
 
 from charon.container import Container
-from charon.domain.models import Principal
+from charon.domain.models import Actor, Principal
 from charon.services.api_key_service import ApiKeyService
 from charon.services.destination_service import DestinationService
 from charon.services.download_service import DownloadService
+from charon.services.event_service import EventService
+from charon.services.feed_inbox import FeedInbox
+from charon.services.feed_service import FeedService
+from charon.services.idempotency_service import IdempotencyService
 from charon.services.rule_service import RuleService
 
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -31,6 +35,22 @@ def get_destination_service(container: Container = Depends(get_container)) -> De
     return container.destination_service
 
 
+def get_event_service(container: Container = Depends(get_container)) -> EventService:
+    return container.event_service
+
+
+def get_idempotency_service(container: Container = Depends(get_container)) -> IdempotencyService:
+    return container.idempotency_service
+
+
+def get_feed_service(container: Container = Depends(get_container)) -> FeedService:
+    return container.feed_service
+
+
+def get_feed_inbox(container: Container = Depends(get_container)) -> FeedInbox:
+    return container.feed_inbox
+
+
 def authenticate(
     x_api_key: str | None = Security(api_key_header),
     service: ApiKeyService = Depends(get_api_key_service),
@@ -44,3 +64,8 @@ def require_admin(
 ) -> Principal:
     service.authorize_admin(principal)
     return principal
+
+
+def current_actor(principal: Principal = Depends(authenticate)) -> Actor:
+    """Who to credit with a change made by this request."""
+    return principal.actor

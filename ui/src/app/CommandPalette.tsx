@@ -1,7 +1,17 @@
-import { LaptopIcon, LogOutIcon, MoonIcon, PlusIcon, SunIcon } from "lucide-react";
+import {
+  LaptopIcon,
+  LogOutIcon,
+  MoonIcon,
+  PlusIcon,
+  RefreshCwIcon,
+  RssIcon,
+  SunIcon,
+} from "lucide-react";
+import { toast } from "sonner";
+import { errorMessage } from "@/api/errors";
 import { useEffect } from "react";
 import { useNavigate } from "react-router";
-import { useRecentJobs } from "@/api/queries";
+import { useRecentJobs, useRefreshAllFeeds } from "@/api/queries";
 import { useAuth, usePrincipal } from "@/auth/AuthProvider";
 import {
   Command,
@@ -41,6 +51,16 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const { signOut } = useAuth();
   const { setTheme } = useTheme();
   const recent = useRecentJobs(open).data?.items ?? [];
+  const refreshFeeds = useRefreshAllFeeds();
+  const onRefreshFeeds = () =>
+    refreshFeeds.mutate(undefined, {
+      onSuccess: (failing) =>
+        failing
+          ? toast.warning(`${failing} feed${failing === 1 ? "" : "s"} can't be read`)
+          : toast.success("Feeds are up to date"),
+      onError: (error) =>
+        toast.error("Couldn't refresh feeds", { description: errorMessage(error) }),
+    });
 
   const run = (action: () => void) => () => {
     onOpenChange(false);
@@ -61,6 +81,12 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
               </CommandItem>
               <CommandItem onSelect={run(() => navigate("/rules?new=1"))}>
                 <PlusIcon /> New rule
+              </CommandItem>
+              <CommandItem onSelect={run(() => navigate("/feeds?add=1"))}>
+                <RssIcon /> Add a feed
+              </CommandItem>
+              <CommandItem onSelect={run(onRefreshFeeds)}>
+                <RefreshCwIcon /> Refresh feeds
               </CommandItem>
             </CommandGroup>
             <CommandGroup heading="Go to">

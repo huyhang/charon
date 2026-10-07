@@ -26,13 +26,17 @@ import { errorProps, FormField } from "./FormField";
 import { StepBuilder } from "./StepBuilder";
 import { TestBench } from "./TestBench";
 
-export type EditorTarget = { mode: "create"; spec: RuleSpec } | { mode: "edit"; rule: Rule };
+export type EditorTarget =
+  /** `sample` is a download name to try the new rule on, e.g. from a feed item. */
+  { mode: "create"; spec: RuleSpec; sample?: string } | { mode: "edit"; rule: Rule };
 
 function errorsFrom(error: unknown): Record<string, string> {
   if (!isApiError(error)) return { _: errorMessage(error) };
   if (error.details) return fieldErrors(error.details);
   const field = fieldForCode(error.code);
-  return { [field ?? "_"]: error.message };
+  // A form-level error (e.g. someone else changed the rule) says what to do about it too.
+  const message = field ? error.message : [error.message, error.hint].filter(Boolean).join(" ");
+  return { [field ?? "_"]: message };
 }
 
 const PATTERN_HINTS = {
@@ -84,7 +88,10 @@ function EditorForm({ target, onDone }: { target: EditorTarget; onDone(): void }
     event.preventDefault();
     setErrors({});
     save.mutate(
-      { id: ruleId, spec },
+      {
+        id: ruleId,
+        spec: target.mode === "edit" ? { ...spec, version: target.rule.version } : spec,
+      },
       {
         onSuccess: (rule) => {
           toast.success(ruleId ? "Rule saved" : "Rule created", { description: rule.name });
@@ -117,6 +124,21 @@ function EditorForm({ target, onDone }: { target: EditorTarget; onDone(): void }
               placeholder="TV shows"
               autoFocus
               {...errorProps("rule-name", errors.name)}
+            />
+          </FormField>
+          <FormField
+            id="rule-description"
+            label="Description"
+            hint="Optional. Why the rule exists, for whoever edits it next."
+            error={errors.description}
+          >
+            <Input
+              id="rule-description"
+              value={spec.description}
+              onChange={(e) => update({ description: e.target.value })}
+              placeholder="Season packs from my usual group"
+              maxLength={500}
+              {...errorProps("rule-description", errors.description)}
             />
           </FormField>
           <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5">
@@ -179,7 +201,7 @@ function EditorForm({ target, onDone }: { target: EditorTarget; onDone(): void }
           />
         </Section>
 
-        <TestBench spec={spec} />
+        <TestBench spec={spec} initialName={target.mode === "create" ? target.sample : undefined} />
 
         {errors._ && (
           <p

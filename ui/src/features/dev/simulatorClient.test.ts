@@ -43,6 +43,18 @@ describe("createHttpSimulator", () => {
       { url: "/_fake/_control/sessions/expire", method: "POST" },
     ],
     ["reset", (s) => s.reset(), { url: "/_fake/_control/reset", method: "POST" }],
+    ["listFeeds", (s) => s.listFeeds(), { url: "/_fake/_control/feeds", method: "GET" }],
+    [
+      "publish",
+      (s) => s.publish("tv"),
+      { url: "/_fake/_control/feeds/tv/publish", method: "POST" },
+    ],
+    [
+      "breakFeed",
+      (s) => s.breakFeed("tv", "bad_xml"),
+      { url: "/_fake/_control/feeds/tv/break", method: "POST", body: { mode: "bad_xml" } },
+    ],
+    ["healFeed", (s) => s.healFeed("tv"), { url: "/_fake/_control/feeds/tv/heal", method: "POST" }],
   ])("%s", async (_, call, expected) => {
     const fake = fakeFetch();
     await call(createHttpSimulator("/_fake", fake.fn));
