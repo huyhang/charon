@@ -247,6 +247,29 @@ describe("FeedsPage", () => {
     expect(await findToast(title)).toHaveTextContent("down");
   });
 
+  it.each<[string, number, FeedItem[], boolean]>([
+    ["a new row the counts don't know of yet", 0, [NEW_SHOW, OLD_SHOW], true],
+    ["counts that know of an item the rows don't show yet", 1, [OLD_SHOW], true],
+    ["nothing new anywhere", 0, [OLD_SHOW], false],
+  ])("offers Mark all seen for %s", async (_label, unread, items, offered) => {
+    await setup({
+      feedSummary: async () => ({ unread, feeds: { tv: unread } }),
+      listFeedItems: async () => ({ items, next_cursor: null }),
+    });
+    await row(OLD_SHOW.name);
+    const button = screen.getByRole("button", { name: /Mark all seen/ });
+    await waitFor(() => expect(button.hasAttribute("disabled")).toBe(!offered));
+  });
+
+  it("refreshes the counts whenever the list refreshes, as new items arrive", async () => {
+    const { client, queryClient } = await setup();
+    await row(NEW_SHOW.name);
+    await waitFor(() => expect(client.feedSummary).toHaveBeenCalled());
+    const before = client.feedSummary.mock.calls.length;
+    await act(() => queryClient.refetchQueries({ queryKey: ["feeds", "items"] }));
+    await waitFor(() => expect(client.feedSummary.mock.calls.length).toBeGreaterThan(before));
+  });
+
   it("says when there was nothing new to mark", async () => {
     await setup({ markAllFeedItemsSeen: async () => 0 });
     await row(NEW_SHOW.name);

@@ -7,6 +7,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
+import { useEffect } from "react";
 import {
   nextPageCursor,
   PAGE_SIZE,
@@ -296,7 +297,8 @@ export function useFeedSummary() {
 
 export function useFeedItems(query: Omit<ListFeedItemsQuery, "cursor" | "limit">) {
   const client = useClient();
-  return useInfiniteQuery({
+  const queryClient = useQueryClient();
+  const items = useInfiniteQuery({
     queryKey: queryKeys.feedItemList(query),
     queryFn: ({ pageParam }) =>
       client.listFeedItems({ ...query, limit: FEED_PAGE_SIZE, cursor: pageParam }),
@@ -305,6 +307,13 @@ export function useFeedItems(query: Omit<ListFeedItemsQuery, "cursor" | "limit">
     refetchInterval: (q) => feedPollInterval(allFeedItems(q.state.data)),
     placeholderData: keepPreviousData,
   });
+  // Charon's poller adds items in the background, so each fresh list may hold new ones: the
+  // unread counts (badge, sidebar, "Mark all seen") are refreshed with it to agree with it.
+  useEffect(() => {
+    if (items.dataUpdatedAt)
+      void queryClient.invalidateQueries({ queryKey: queryKeys.feedSummary });
+  }, [items.dataUpdatedAt, queryClient]);
+  return items;
 }
 
 export function useFeedPreview(url: string | null) {

@@ -47,7 +47,8 @@ export function FeedPreviewPanel({ preview, error, loading }: FeedPreviewPanelPr
     <div className="space-y-3">
       <div className="space-y-0.5">
         <p className="flex items-center gap-2 font-medium">
-          <RssIcon className="size-4 text-primary" /> {preview.title ?? "Untitled feed"}
+          <RssIcon className="size-4 shrink-0 text-primary" />
+          <span className="truncate">{preview.title ?? "Untitled feed"}</span>
         </p>
         <p className="text-xs text-muted-foreground">
           {plural(preview.item_count, "item")} with magnet links
@@ -60,8 +61,10 @@ export function FeedPreviewPanel({ preview, error, loading }: FeedPreviewPanelPr
         <ul className="space-y-1.5" aria-label="Newest items">
           {preview.items.map((item) => (
             <li key={item.info_hash} className="flex items-center gap-2">
-              <span className="min-w-0 flex-1 truncate font-mono text-xs">{item.name}</span>
-              <MatchChip item={item} />
+              <span className="min-w-0 flex-1 truncate font-mono text-xs" title={item.name}>
+                {item.name}
+              </span>
+              <MatchChip item={item} className="max-w-[50%]" />
             </li>
           ))}
         </ul>

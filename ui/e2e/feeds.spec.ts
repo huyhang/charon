@@ -129,3 +129,49 @@ test("on a phone, an item's name gets the row's whole width", async ({ page, req
     await removeNamed(request, "feeds", `phone ${run}`);
   }
 });
+
+// Real feeds have long release names, titles and rule names; none should push past the dialog.
+const LONG = {
+  name: "Injected.By.This.Test.An.Extraordinarily.Long.Release.Name.S01E01.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR10Plus.H.265-GROUP.mkv",
+  title: `Tracker${"X".repeat(120)}`,
+  rule: "A rule with a really quite remarkably long descriptive name for TV",
+};
+
+for (const [device, viewport] of [
+  ["a desktop", { width: 1400, height: 900 }],
+  ["a phone", { width: 390, height: 844 }],
+] as const) {
+  test(`on ${device}, a new feed's preview keeps long names inside the dialog`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await page.route("**/api/v1/feeds/preview", async (route) => {
+      const response = await route.fetch();
+      const preview = await response.json();
+      preview.title = LONG.title;
+      preview.items[0].name = LONG.name;
+      preview.items.find((item: { match: unknown }) => item.match).match.rule_name = LONG.rule;
+      await route.fulfill({ response, json: preview });
+    });
+    await signIn(page);
+    await page.goto("/feeds");
+    await page
+      .getByRole("button", { name: /Add (your first )?feed/ })
+      .first()
+      .click();
+    const dialog = page.getByRole("dialog", { name: "Add a feed" });
+    await dialog.getByRole("textbox", { name: "Address" }).fill(tvFeed(token()));
+    await expect(dialog.getByText(LONG.name)).toBeVisible();
+    const outside = await dialog.evaluate((box) => {
+      const edge = box.getBoundingClientRect().right;
+      const spills = (el: Element) =>
+        !["INPUT", "TEXTAREA"].includes(el.tagName) &&
+        el.scrollWidth > el.clientWidth + 1 &&
+        getComputedStyle(el).overflowX === "visible";
+      return [...box.querySelectorAll("*")]
+        .filter((el) => el.getBoundingClientRect().right > edge + 0.5 || spills(el))
+        .map((el) => el.textContent?.slice(0, 40));
+    });
+    expect(outside).toEqual([]);
+  });
+}

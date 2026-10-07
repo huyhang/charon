@@ -183,6 +183,8 @@ export function FeedsPage() {
 
   const refreshing = refreshAll.isPending || refreshOne.isPending;
   const unread = feedId ? (summary.data?.feeds[feedId] ?? 0) : (summary.data?.unread ?? 0);
+  // The counts and the list are fetched separately, so either may know of a new item first.
+  const anythingNew = unread > 0 || items.some((item) => !item.seen);
   const onCreated = (feed: Feed) => set("feed", feed.id);
 
   return (
@@ -197,7 +199,7 @@ export function FeedsPage() {
                 variant="ghost"
                 size="sm"
                 onClick={onMarkAllSeen}
-                disabled={unread === 0 || markAllSeen.isPending}
+                disabled={!anythingNew || markAllSeen.isPending}
               >
                 <CheckCheckIcon /> <span className="hidden sm:inline">Mark all seen</span>
               </Button>
