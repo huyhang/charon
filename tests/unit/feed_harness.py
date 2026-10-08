@@ -1,6 +1,9 @@
 """Feed services wired with in-memory fakes."""
 
+from pathlib import PurePosixPath
+
 from charon.services.auto_downloader import AutoDownloader
+from charon.services.download_folder import DownloadFolder
 from charon.services.download_service import DownloadService
 from charon.services.feed_inbox import FeedInbox
 from charon.services.feed_refresher import FeedRefresher
@@ -11,6 +14,7 @@ from tests.unit.fakes import (
     FakeClock,
     FakeDownloader,
     FakeFeedFetcher,
+    FakeFileOps,
     InMemoryFeedItemStore,
     InMemoryFeedStore,
     InMemoryJobStore,
@@ -32,8 +36,15 @@ class FeedHarness:
         self.downloader = FakeDownloader()
         self.rule_store = InMemoryRuleStore(rules or [SHOW_RULE])
         self.rules = RuleService(self.rule_store, ALLOW_ALL, self.events, clock=self.clock)
+        folder = DownloadFolder(FakeFileOps(), PurePosixPath("/downloads"))
         self.downloads = DownloadService(
-            self.jobs, self.rules, self.downloader, self.events, self.clock, SequentialIds("job")
+            self.jobs,
+            self.rules,
+            self.downloader,
+            folder,
+            self.events,
+            self.clock,
+            SequentialIds("job"),
         )
         self.fetcher = FakeFeedFetcher()
         self.feeds = InMemoryFeedStore(feeds)

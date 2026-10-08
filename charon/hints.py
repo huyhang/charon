@@ -24,7 +24,10 @@ HINTS: dict[str, str] = {
     "rule_not_found": (
         "The rule was deleted. Reload the rules, or retry the download to match the current ones."
     ),
-    "task_missing": "The task disappeared from Download Station. Retry to start a fresh download.",
+    "task_missing": (
+        "Download Station no longer has the task. Retry: if the download is in the download "
+        "folder, Charon files it; otherwise it starts a fresh download."
+    ),
     "backend_error": (
         "Download Station reported a problem. Check the link is still valid, then retry."
     ),

@@ -30,6 +30,10 @@ class ErrorStage(StrEnum):
     PROCESSING = "processing"
 
 
+# The error code of a job whose backend task is gone. Retrying it may skip the download.
+TASK_MISSING = "task_missing"
+
+
 class JobError(BaseModel):
     stage: ErrorStage
     code: str

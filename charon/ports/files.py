@@ -17,6 +17,13 @@ class FileOps(Protocol):
         """Move a file or directory, creating missing parent directories."""
         ...
 
+    def size(self, path: PurePosixPath) -> int:
+        """Bytes in the file at `path`, or in every file under it if it is a directory.
+
+        Symlinks aren't followed. Raises FileNotFoundError if nothing is there.
+        """
+        ...
+
     def resolve(self, path: PurePosixPath) -> PurePosixPath:
         """The real path with symlinks followed; missing components are kept as-is."""
         ...

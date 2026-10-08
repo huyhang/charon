@@ -33,6 +33,7 @@ from charon.ports.stores import SettingsStore
 from charon.services.api_key_service import ApiKeyService
 from charon.services.auto_downloader import AutoDownloader
 from charon.services.destination_service import DestinationService
+from charon.services.download_folder import DownloadFolder
 from charon.services.download_service import DownloadService
 from charon.services.event_service import EventService
 from charon.services.feed_inbox import FeedInbox
@@ -161,16 +162,9 @@ def build_container(settings: Settings) -> Container:
     events = EventService(SqliteEventStore(db))
     rule_service = RuleService(SqliteRuleStore(db), policy, events)
     files = LocalFileOps()
-    processor = PostProcessor(
-        jobs,
-        rule_service,
-        downloader,
-        files,
-        PurePosixPath(settings.download_dir),
-        policy,
-        events,
-    )
-    downloads = DownloadService(jobs, rule_service, downloader, events)
+    folder = DownloadFolder(files, PurePosixPath(settings.download_dir))
+    processor = PostProcessor(jobs, rule_service, downloader, files, folder, policy, events)
+    downloads = DownloadService(jobs, rule_service, downloader, folder, events)
     idempotency = IdempotencyService(SqliteIdempotencyStore(db))
     feeds = build_feeds(settings, db, rule_service, downloads, events, closers)
     return Container(
@@ -183,7 +177,7 @@ def build_container(settings: Settings) -> Container:
         feed_service=feeds.service,
         feed_inbox=feeds.inbox,
         downloader=downloader,
-        watcher=Watcher(jobs, downloader, processor, events),
+        watcher=Watcher(jobs, downloader, processor, folder, events),
         housekeeper=Housekeeper(events, idempotency, feeds.inbox),
         metadata_service=build_metadata(settings, SqliteSettingsStore(db), closers),
         poll_interval_seconds=settings.poll_interval_seconds,

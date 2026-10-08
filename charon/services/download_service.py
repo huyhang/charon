@@ -15,6 +15,7 @@ from charon.domain.magnets import (
 from charon.domain.models import (
     CANCELLABLE_STATUSES,
     SYSTEM,
+    TASK_MISSING,
     Actor,
     ErrorStage,
     Job,
@@ -28,6 +29,7 @@ from charon.ports.downloader import Downloader
 from charon.ports.events import EventLog
 from charon.ports.stores import JobCursor, JobStore
 from charon.services.backend import remove_task_best_effort
+from charon.services.download_folder import DownloadFolder, complete_progress
 from charon.services.job_events import record_status_change
 from charon.services.keyed_lock import KeyedLock
 from charon.services.rule_service import RuleService
@@ -62,6 +64,7 @@ class DownloadService:
         jobs: JobStore,
         rules: RuleService,
         downloader: Downloader,
+        folder: DownloadFolder,
         events: EventLog,
         clock: Clock = utc_now,
         new_id: IdFactory = new_uuid,
@@ -69,6 +72,7 @@ class DownloadService:
         self._jobs = jobs
         self._rules = rules
         self._downloader = downloader
+        self._folder = folder
         self._events = events
         self._clock = clock
         self._new_id = new_id
@@ -142,6 +146,17 @@ class DownloadService:
             raise ConflictError("job_not_retryable", f"job is {job.status}")
         if job.error is not None and job.error.stage is ErrorStage.PROCESSING:
             return self._save(job, actor, status=JobStatus.COMPLETED, error=None, rule_id=None)
+        if self._already_downloaded(job):
+            # Its task vanished, but the download is all there: post-process it, don't fetch it
+            # again. Post-processing also removes the task, in case the backend still has it.
+            return self._save(
+                job,
+                actor,
+                status=JobStatus.COMPLETED,
+                error=None,
+                progress=complete_progress(job),
+                completed_at=self._clock(),
+            )
         # The failed task would otherwise linger in the backend next to its replacement.
         remove_task_best_effort(self._downloader, job.backend_task_id)
         return self._save(
@@ -153,6 +168,10 @@ class DownloadService:
             progress=Progress(),
             completed_at=None,
         )
+
+    def _already_downloaded(self, job: Job) -> bool:
+        missing = job.error is not None and job.error.code == TASK_MISSING
+        return missing and self._folder.has_complete(job)
 
     def _existing(self, magnet: str) -> Job | None:
         hash_ = info_hash(magnet)

@@ -77,6 +77,35 @@ def test_download_is_renamed_and_moved(stack: Stack) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("steer", "body"),
+    [("hiccup", {"lookups": 2}), ("vanish", None)],
+    ids=["no-such-task-for-a-moment", "task-dropped-once-finished"],
+)
+def test_a_task_lost_as_it_finishes_is_still_renamed_and_moved(
+    stack: Stack, steer: str, body: dict | None
+) -> None:
+    """Download Station can say it has no such task for a moment as one finishes, or drop a
+    finished task (it, or another client) before Charon next looks. Neither may fail the job."""
+    token = unique_token()
+    create_rule(stack, token)
+    uri = magnet(f"Show.{token}.XYZ.mkv")
+    job = submit(stack, uri)
+    # Charon has seen it downloading, so knows its name and size, as before it finishes.
+    assert wait_for(stack, job["id"], {"downloading"} | TERMINAL)["status"] == "downloading"
+    task_id = backend_task_id(stack, uri)
+    response = stack.fake.post(f"/_control/tasks/{task_id}/{steer}", json=body)
+    assert response.is_success, response.text
+
+    done = wait_for(stack, job["id"], TERMINAL)
+
+    assert done["status"] == "done", done
+    assert (
+        done["processing"]["final_path"] == f"{stack.library_service}/{token}/Show.{token}.ABC.mkv"
+    )
+    assert (stack.library_local / token / f"Show.{token}.ABC.mkv").exists()
+
+
 def test_forced_rule_overrides_matching(stack: Stack) -> None:
     token = unique_token()
     forced = create_rule(stack, token, pattern="never-matches", steps=[])

@@ -77,3 +77,25 @@ def test_list_folders_rejects_non_directories(tmp_path, entry: str, error: type)
         path.write_text("x")
     with pytest.raises(error):
         LocalFileOps().list_folders(PurePosixPath(path))
+
+
+def test_size_of_a_file_is_its_bytes(tmp_path) -> None:
+    (tmp_path / "Show.mkv").write_bytes(b"x" * 1234)
+    assert LocalFileOps().size(PurePosixPath(tmp_path / "Show.mkv")) == 1234
+
+
+def test_size_of_a_folder_is_every_file_under_it_without_following_symlinks(tmp_path) -> None:
+    show = tmp_path / "Show S01"
+    (show / "Extras").mkdir(parents=True)
+    (show / "E01.mkv").write_bytes(b"x" * 100)
+    (show / "Extras" / "making-of.mkv").write_bytes(b"x" * 20)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "huge.bin").write_bytes(b"x" * 10_000)
+    (show / "linked").symlink_to(elsewhere)
+    assert LocalFileOps().size(PurePosixPath(show)) == 120
+
+
+def test_size_of_nothing_raises(tmp_path) -> None:
+    with pytest.raises(FileNotFoundError):
+        LocalFileOps().size(PurePosixPath(tmp_path / "missing"))

@@ -427,6 +427,8 @@ class FakeFileOps:
         self.symlinks: dict[PurePosixPath, PurePosixPath] = {}
         # Folder names inside each directory, for `list_folders`.
         self.folders: dict[PurePosixPath, list[str]] = {}
+        # Bytes at each path, for `size`; 0 if not given.
+        self.sizes: dict[PurePosixPath, int] = {}
 
     def exists(self, path: PurePosixPath) -> bool:
         self._maybe_fail("exists")
@@ -438,6 +440,12 @@ class FakeFileOps:
         self.paths.discard(source)
         self.paths.add(destination)
         self.moves.append((source, destination))
+
+    def size(self, path: PurePosixPath) -> int:
+        self._maybe_fail("size")
+        if path not in self.paths:
+            raise FileNotFoundError(f"nothing at {path}")
+        return self.sizes.get(path, 0)
 
     def resolve(self, path: PurePosixPath) -> PurePosixPath:
         self._maybe_fail("resolve")

@@ -25,8 +25,9 @@ class FakeTask:
 class Simulator:
     """Tasks progress linearly from 0 to 100% over `duration_seconds`.
 
-    When a task first reports `finished`, a small placeholder file named after the
-    task is written into `download_dir`, mimicking Download Station's output.
+    When a task first reports `finished`, a placeholder file named after the task is written
+    into `download_dir`, mimicking Download Station's output. It is as big as the task says
+    (sparse, so it takes next to no space), as Charon checks a download's size.
     """
 
     def __init__(
@@ -42,6 +43,8 @@ class Simulator:
         self._clock = clock
         self._tasks: dict[str, FakeTask] = {}
         self._ids = itertools.count(1)
+        # How many more lookups of each task find nothing (see `hiccup`).
+        self._hiccups: dict[str, int] = {}
 
     def create(self, uri: str, destination: str) -> FakeTask:
         task_id = f"dbid_{next(self._ids)}"
@@ -51,6 +54,13 @@ class Simulator:
 
     def get(self, task_id: str) -> FakeTask | None:
         return self._tasks.get(task_id)
+
+    def lookup(self, task_id: str) -> FakeTask | None:
+        """The task as the Web API finds it: `get`, except while it is hiccuping."""
+        if self._hiccups.get(task_id, 0) > 0:
+            self._hiccups[task_id] -= 1
+            return None
+        return self.get(task_id)
 
     def all(self) -> list[FakeTask]:
         return list(self._tasks.values())
@@ -67,8 +77,25 @@ class Simulator:
             task.error_detail = detail
         return task
 
+    def vanish(self, task_id: str) -> bool:
+        """Drop a task as Download Station (or another client) can once it finishes: without
+        Charon asking, and leaving its finished download in the folder."""
+        task = self._tasks.pop(task_id, None)
+        if task is not None:
+            self._materialize(task)
+        return task is not None
+
+    def hiccup(self, task_id: str, lookups: int = 1) -> FakeTask | None:
+        """Have the next `lookups` lookups of the task find nothing, as Download Station can
+        briefly answer "invalid task id" for a task that is finishing."""
+        task = self._tasks.get(task_id)
+        if task is not None:
+            self._hiccups[task_id] = lookups
+        return task
+
     def reset(self) -> None:
         self._tasks.clear()
+        self._hiccups.clear()
 
     def snapshot(self, task: FakeTask) -> dict[str, Any]:
         """Render a task the way SYNO.DownloadStation.Task getinfo does.
@@ -116,7 +143,9 @@ class Simulator:
         path = self._download_dir / task.name
         if not path.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(f"fake download of {task.uri}\n")
+            with path.open("w") as file:
+                file.write(f"fake download of {task.uri}\n")
+                file.truncate(self._size)
 
 
 def name_from_uri(uri: str, fallback: str) -> str:

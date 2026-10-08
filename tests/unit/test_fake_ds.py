@@ -65,12 +65,29 @@ def test_snapshot_uses_documented_types(simulator) -> None:
     assert (raw["size"], raw["status_extra"]) == ("1000", None)
 
 
-def test_finishing_writes_placeholder_file(simulator, tmp_path) -> None:
+def test_finishing_writes_placeholder_file_as_big_as_reported(simulator, tmp_path) -> None:
     task = simulator.create("magnet:?dn=f.mkv", "downloads")
     assert not (tmp_path / "f.mkv").exists()
     simulator.complete(task.id)
     simulator.snapshot(task)
     assert (tmp_path / "f.mkv").read_text().startswith("fake download of")
+    assert (tmp_path / "f.mkv").stat().st_size == 1000
+
+
+def test_vanish_drops_the_task_and_leaves_its_whole_download(simulator, tmp_path) -> None:
+    task = simulator.create("magnet:?dn=f.mkv", "downloads")
+    assert simulator.vanish(task.id) is True
+    assert simulator.get(task.id) is None
+    assert (tmp_path / "f.mkv").stat().st_size == 1000
+    assert simulator.vanish(task.id) is False
+
+
+def test_hiccup_hides_the_task_from_the_next_lookups_only(simulator) -> None:
+    task = simulator.create("magnet:?dn=f.mkv", "downloads")
+    assert simulator.hiccup(task.id, lookups=2) is task
+    assert [simulator.lookup(task.id) for _ in range(3)] == [None, None, task]
+    assert simulator.get(task.id) is task  # the control endpoints still see it
+    assert simulator.hiccup("dbid_404") is None
 
 
 def test_fail_reports_error_detail(simulator) -> None:
@@ -187,3 +204,24 @@ def test_control_reset_clears_tasks(fake, simulator) -> None:
     simulator.create("magnet:?dn=a", "downloads")
     fake.post("/_control/reset")
     assert fake.get("/_control/tasks").json() == []
+
+
+def test_contract_hiccup_and_vanish_through_the_web_api(fake) -> None:
+    downloader = make_downloader(fake)
+    task_id = downloader.add("magnet:?dn=Show.mkv")
+    hiccup = fake.post(f"/_control/tasks/{task_id}/hiccup", json={"lookups": 1})
+    assert hiccup.json()["id"] == task_id
+    assert downloader.get(task_id) is None  # Download Station's "invalid task id"
+    assert downloader.get(task_id) is not None
+    assert fake.post(f"/_control/tasks/{task_id}/vanish").status_code == 204
+    assert downloader.get(task_id) is None
+
+
+@pytest.mark.parametrize("action", ["vanish", "hiccup"])
+def test_steering_an_unknown_task_is_404(fake, action: str) -> None:
+    assert fake.post(f"/_control/tasks/dbid_404/{action}").status_code == 404
+
+
+def test_a_hiccup_lasts_at_least_one_lookup(fake) -> None:
+    task_id = make_downloader(fake).add("magnet:?dn=Show.mkv")
+    assert fake.post(f"/_control/tasks/{task_id}/hiccup", json={"lookups": 0}).status_code == 422

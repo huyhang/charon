@@ -39,7 +39,7 @@ when `CHARON_ADMIN_API_KEY` is set (see [API keys](#api-keys)). Paths below omit
 | `GET /downloads/summary` | Jobs per status across all jobs, and the combined download speed |
 | `GET /downloads/{id}` | Job status and progress |
 | `DELETE /downloads/{id}` | Cancel a queued, downloading or completed job |
-| `POST /downloads/{id}/retry` | Retry a failed job (a failed download gets a fresh task) |
+| `POST /downloads/{id}/retry` | Retry a failed job: a failed download gets a fresh task, unless its task vanished but the whole download is already in the download folder (then it's just filed) |
 | `GET/POST /rules`, `GET/PUT/DELETE /rules/{id}` | Manage rules. `PUT` with `version` (or `If-Match`) refuses to overwrite a newer edit |
 | `POST /rules/reorder` `{ids}` | Put every rule in a new order at once |
 | `POST /rules/preview` `{name, rule_id? \| rule?}` | Dry run: what a name would become, under the saved rules or an unsaved draft `rule` |
@@ -133,6 +133,13 @@ unexpected is a `500` with `internal_error`, in the same shape. A job's `error` 
   `move_failed` and the OS message. Fix the permissions, then retry. A job never stays stuck
   in `processing`: anything unexpected fails it with `internal_error` (details in the log).
 - After a successful move, the task is removed from Download Station (seeding stops).
+- A task Download Station no longer has (it can briefly say so as a task finishes, and it or
+  another client may clear finished tasks) only counts as gone once it has been missing for 3
+  checks in a row (about 30 s at the default `CHARON_POLL_INTERVAL_SECONDS`). If the job's
+  whole download is then in the download folder (as many bytes as Download Station reported),
+  it is renamed and moved as usual; otherwise the job fails with `task_missing`. Retrying such
+  a job files its download if it has since arrived in full, and downloads it afresh if not.
+  Each step is logged.
 
 ### Feeds
 
@@ -442,7 +449,8 @@ each API only at the path `SYNO.API.Info` reports, rejects unsupported versions,
 response types from Synology's API guide (string sizes, `"status_extra": null`, error `404`
 for unknown task ids), so a client that guesses paths or shapes fails here too. Tasks progress over
 `FAKE_DS_DURATION_SECONDS`, then a placeholder file named after the magnet's `dn` is written
-into `FAKE_DS_DOWNLOAD_DIR`, so rename/move really happens.
+into `FAKE_DS_DOWNLOAD_DIR`, so rename/move really happens. It is as big as the task reports
+(sparse, so it takes next to no space), since Charon checks a download's size.
 
 Test-only control endpoints:
 
@@ -451,6 +459,8 @@ Test-only control endpoints:
 | `GET /_control/tasks` | List tasks |
 | `POST /_control/tasks/{id}/complete` | Finish a task now |
 | `POST /_control/tasks/{id}/fail` `{detail}` | Fail a task |
+| `POST /_control/tasks/{id}/vanish` | Drop a task as Download Station (or another client) can once it finishes, leaving its whole download in the folder |
+| `POST /_control/tasks/{id}/hiccup` `{lookups?}` | Answer "invalid task id" (`404`) for the task's next `lookups` (default 1) lookups, as Download Station can while a task finishes |
 | `POST /_control/sessions/expire` | Invalidate sessions (tests re-login) |
 | `POST /_control/reset` | Clear all tasks and sessions, and restore the sample feeds and fake TMDB |
 | `GET /feeds/{tv,anime}.xml` | Sample RSS feeds of magnet links, dated relative to when the fake started (honours `If-None-Match`) |

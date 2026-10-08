@@ -6,6 +6,7 @@ from charon.adapters.local_fs import LocalFileOps
 from charon.domain import rename
 from charon.domain.destinations import DestinationPolicy
 from charon.domain.models import ErrorStage, JobStatus
+from charon.services.download_folder import DownloadFolder
 from charon.services.post_processor import PostProcessor
 from charon.services.rule_service import RuleService
 from tests.unit.fakes import (
@@ -42,7 +43,7 @@ class Harness:
             RuleService(InMemoryRuleStore(rules), ALLOW_ALL, RecordingEventLog()),
             self.downloader,
             self.files,
-            PurePosixPath("/downloads"),
+            DownloadFolder(self.files, PurePosixPath("/downloads")),
             policy,
             self.events,
             clock=FakeClock(),
@@ -222,7 +223,7 @@ def test_symlink_at_final_path_is_never_followed_out_of_the_roots(tmp_path, targ
         ),
         FakeDownloader(),
         LocalFileOps(),
-        PurePosixPath(downloads),
+        DownloadFolder(LocalFileOps(), PurePosixPath(downloads)),
         policy,
         RecordingEventLog(),
     )

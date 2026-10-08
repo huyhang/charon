@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import threading
 import time
 from pathlib import PurePosixPath
@@ -8,9 +9,17 @@ import pytest
 from charon.domain.models import SYSTEM, ErrorStage, JobStatus, Progress
 from charon.errors import DownloaderError
 from charon.ports.downloader import BackendStatus, BackendTask
+from charon.services.download_folder import DownloadFolder
 from charon.services.post_processor import PostProcessor
 from charon.services.rule_service import RuleService
-from charon.services.watcher import Watcher, reconcile, run_periodically, to_progress
+from charon.services.watcher import (
+    MISSING_CHECKS,
+    Watcher,
+    found_complete,
+    reconcile,
+    run_periodically,
+    to_progress,
+)
 from tests.unit.fakes import (
     ALLOW_ALL,
     T0,
@@ -98,17 +107,20 @@ class Harness:
         self.jobs = InMemoryJobStore(jobs)
         self.downloader = FakeDownloader()
         self.files = FakeFileOps(["/downloads/Show.mkv"])
+        folder = DownloadFolder(self.files, PurePosixPath("/downloads"))
         processor = PostProcessor(
             self.jobs,
             RuleService(InMemoryRuleStore(), ALLOW_ALL, RecordingEventLog()),
             self.downloader,
             self.files,
-            PurePosixPath("/downloads"),
+            folder,
             ALLOW_ALL,
             RecordingEventLog(),
         )
         self.events = RecordingEventLog()
-        self.watcher = Watcher(self.jobs, self.downloader, processor, self.events, FakeClock())
+        self.watcher = Watcher(
+            self.jobs, self.downloader, processor, folder, self.events, FakeClock()
+        )
 
 
 def test_tick_syncs_and_processes_finished_download_in_one_pass() -> None:
@@ -167,6 +179,101 @@ def test_tick_isolates_unexpected_failure_to_one_job(error: Exception) -> None:
     h.watcher.tick()
     assert h.jobs.jobs["job-1"].status is JobStatus.DONE
     assert h.jobs.jobs["broken"].status is JobStatus.DOWNLOADING
+
+
+SHOW = PurePosixPath("/downloads/Show.mkv")
+
+
+def nearly_done(**overrides) -> object:
+    """A job whose last check saw its download almost finished, as Download Station said."""
+    progress = Progress(percent=96.0, size_bytes=1000, downloaded_bytes=960)
+    return make_job(status=JobStatus.DOWNLOADING, name="Show.mkv", progress=progress, **overrides)
+
+
+def tick_times(h: Harness, times: int) -> list[JobStatus]:
+    statuses = []
+    for _ in range(times):
+        h.watcher.tick()
+        statuses.append(h.jobs.jobs["job-1"].status)
+    return statuses
+
+
+def test_a_missing_task_is_only_believed_after_several_checks_in_a_row() -> None:
+    h = Harness(nearly_done())
+    statuses = tick_times(h, MISSING_CHECKS)
+    assert statuses == [JobStatus.DOWNLOADING] * (MISSING_CHECKS - 1) + [JobStatus.FAILED]
+    error = h.jobs.jobs["job-1"].error
+    assert (error.stage, error.code) == (ErrorStage.DOWNLOAD, "task_missing")
+
+
+def test_a_task_that_answers_again_starts_the_count_afresh() -> None:
+    """Download Station can briefly say it has no such task while one finishes."""
+    h = Harness(nearly_done())
+    for answers in [False] * (MISSING_CHECKS - 1) + [True] + [False] * (MISSING_CHECKS - 1):
+        h.downloader.tasks["task-1"] = task(BackendStatus.DOWNLOADING) if answers else None
+        h.watcher.tick()
+    assert h.jobs.jobs["job-1"].status is JobStatus.DOWNLOADING
+    h.watcher.tick()
+    assert h.jobs.jobs["job-1"].status is JobStatus.FAILED
+
+
+@pytest.mark.parametrize(
+    ("size_on_disk", "status", "final_path"),
+    [(1000, JobStatus.DONE, str(SHOW)), (999, JobStatus.FAILED, None)],
+    ids=["complete", "partial"],
+)
+def test_once_its_task_is_gone_a_complete_download_is_processed_anyway(
+    size_on_disk: int, status: JobStatus, final_path: str | None
+) -> None:
+    h = Harness(nearly_done())
+    h.files.sizes[SHOW] = size_on_disk
+    tick_times(h, MISSING_CHECKS)
+    job = h.jobs.jobs["job-1"]
+    assert (job.status, job.final_path) == (status, final_path)
+    expected_events = [JobStatus.COMPLETED] if status is JobStatus.DONE else [JobStatus.FAILED]
+    assert [e.data["status"] for e in h.events.recorded] == expected_events
+
+
+def test_found_complete_shows_all_of_the_download_and_when() -> None:
+    clock = FakeClock()
+    clock.advance(60)
+    job = found_complete(nearly_done(), clock())
+    assert job.status is JobStatus.COMPLETED
+    assert job.progress == Progress(percent=100.0, size_bytes=1000, downloaded_bytes=1000)
+    assert (job.completed_at, job.updated_at) == (clock(), clock())
+
+
+def test_counts_are_dropped_for_jobs_that_stop_being_active() -> None:
+    h = Harness(nearly_done())
+    tick_times(h, MISSING_CHECKS - 1)
+    job = h.jobs.jobs["job-1"]
+    h.jobs.jobs["job-1"] = job.model_copy(update={"status": JobStatus.CANCELLED})
+    h.watcher.tick()
+    h.jobs.jobs["job-1"] = job
+    assert tick_times(h, 1) == [JobStatus.DOWNLOADING]  # counting starts again
+
+
+@pytest.mark.parametrize(
+    ("size_on_disk", "last"),
+    [
+        (1000, "task task-1 of job job-1 is gone, but its download is complete; processing it"),
+        (0, "task task-1 of job job-1 is gone from the backend"),
+    ],
+    ids=["complete", "not-there"],
+)
+def test_a_vanishing_task_is_logged_at_every_step(caplog, size_on_disk: int, last: str) -> None:
+    h = Harness(nearly_done())
+    h.files.sizes[SHOW] = size_on_disk
+    with caplog.at_level(logging.WARNING, logger="charon.services.watcher"):
+        tick_times(h, MISSING_CHECKS)
+    logged = [r.getMessage() for r in caplog.records if r.name == "charon.services.watcher"]
+    assert logged == [
+        *(
+            f"task task-1 of job job-1 is missing from the backend (check {n} of {MISSING_CHECKS})"
+            for n in range(1, MISSING_CHECKS)
+        ),
+        last,
+    ]
 
 
 def test_recover_requeues_interrupted_processing() -> None:

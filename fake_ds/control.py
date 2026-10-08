@@ -3,7 +3,7 @@
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from fake_ds.station import FakeStation
 
@@ -12,6 +12,10 @@ router = APIRouter(prefix="/_control", tags=["control"])
 
 class FailRequest(BaseModel):
     detail: str = "broken_link"
+
+
+class HiccupRequest(BaseModel):
+    lookups: int = Field(default=1, ge=1)
 
 
 def _station(request: Request) -> FakeStation:
@@ -35,6 +39,20 @@ def fail(task_id: str, request: Request, body: FailRequest | None = None) -> dic
     simulator = _station(request).simulator
     detail = (body or FailRequest()).detail
     return simulator.snapshot(_require(simulator.fail(task_id, detail)))
+
+
+@router.post("/tasks/{task_id}/vanish", status_code=204)
+def vanish(task_id: str, request: Request) -> None:
+    """Drop the task as Download Station can once it finishes, leaving its download."""
+    _require(_station(request).simulator.vanish(task_id) or None)
+
+
+@router.post("/tasks/{task_id}/hiccup")
+def hiccup(task_id: str, request: Request, body: HiccupRequest | None = None) -> dict[str, Any]:
+    """Answer "invalid task id" for the task's next `lookups` lookups, then normally again."""
+    simulator = _station(request).simulator
+    lookups = (body or HiccupRequest()).lookups
+    return simulator.snapshot(_require(simulator.hiccup(task_id, lookups)))
 
 
 @router.post("/sessions/expire", status_code=204)

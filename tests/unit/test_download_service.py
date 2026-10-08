@@ -1,17 +1,20 @@
 import base64
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import PurePosixPath
 
 import pytest
 
 from charon.domain.events import EventType
-from charon.domain.models import Actor, ErrorStage, JobError, JobStatus
+from charon.domain.models import Actor, ErrorStage, Job, JobError, JobStatus, Progress
 from charon.errors import ConflictError, DownloaderError, InvalidInputError, NotFoundError
+from charon.services.download_folder import DownloadFolder
 from charon.services.download_service import DownloadService, decode_cursor, encode_cursor
 from charon.services.rule_service import RuleService
 from tests.unit.fakes import (
     ALLOW_ALL,
     FakeClock,
     FakeDownloader,
+    FakeFileOps,
     HeldAdds,
     InMemoryJobStore,
     InMemoryRuleStore,
@@ -36,10 +39,12 @@ class Harness:
         self.downloader = FakeDownloader()
         self.clock = FakeClock()
         self.events = RecordingEventLog()
+        self.files = FakeFileOps()
         self.service = DownloadService(
             self.jobs,
             RuleService(self.rules, ALLOW_ALL, RecordingEventLog()),
             self.downloader,
+            DownloadFolder(self.files, PurePosixPath("/downloads")),
             self.events,
             clock=self.clock,
             new_id=SequentialIds("job"),
@@ -305,6 +310,56 @@ def test_retry_download_failure_replaces_backend_task() -> None:
     h = Harness(make_job(status=JobStatus.FAILED, error=error, backend_task_id="old"))
     job = h.service.retry("job-1")
     assert (job.status, job.error, job.backend_task_id) == (JobStatus.QUEUED, None, "task-1")
+    assert (h.downloader.removed, h.downloader.added) == (["old"], [MAGNET])
+
+
+def vanished(code: str = "task_missing", size: int | None = 1000, **overrides) -> Job:
+    """A job whose download failed (by default: its task vanished) at 96%."""
+    error = JobError(stage=ErrorStage.DOWNLOAD, code=code, message="x")
+    progress = Progress(percent=96.0, size_bytes=size, downloaded_bytes=960)
+    return make_job(
+        status=JobStatus.FAILED,
+        error=error,
+        name="Show.mkv",
+        progress=progress,
+        backend_task_id="old",
+        **overrides,
+    )
+
+
+def test_retry_files_a_vanished_tasks_download_that_is_all_there() -> None:
+    h = Harness(vanished())
+    h.files.paths.add(PurePosixPath("/downloads/Show.mkv"))
+    h.files.sizes[PurePosixPath("/downloads/Show.mkv")] = 1000
+    job = h.service.retry("job-1", PHONE)
+    assert (job.status, job.error, job.backend_task_id) == (JobStatus.COMPLETED, None, "old")
+    assert job.progress == Progress(percent=100.0, size_bytes=1000, downloaded_bytes=1000)
+    assert job.completed_at == h.clock()
+    # Nothing fetched again; post-processing removes the old task, if the backend still has it.
+    assert (h.downloader.added, h.downloader.removed) == ([], [])
+    [event] = h.events.recorded
+    assert (event.actor, event.data["status"]) == (PHONE, JobStatus.COMPLETED)
+
+
+@pytest.mark.parametrize(
+    ("job", "size_on_disk"),
+    [
+        (vanished(), 999),  # only part of it arrived
+        (vanished(), None),  # nothing there
+        (vanished(size=None), 1000),  # the backend never said how big it is
+        (vanished(code="backend_error"), 1000),  # the backend failed it: don't trust the files
+    ],
+    ids=["partial", "absent", "size-unknown", "backend-error"],
+)
+def test_retry_downloads_again_unless_the_whole_download_is_there(
+    job: Job, size_on_disk: int | None
+) -> None:
+    h = Harness(job)
+    if size_on_disk is not None:
+        h.files.paths.add(PurePosixPath("/downloads/Show.mkv"))
+        h.files.sizes[PurePosixPath("/downloads/Show.mkv")] = size_on_disk
+    retried = h.service.retry("job-1")
+    assert (retried.status, retried.backend_task_id) == (JobStatus.QUEUED, "task-1")
     assert (h.downloader.removed, h.downloader.added) == (["old"], [MAGNET])
 
 

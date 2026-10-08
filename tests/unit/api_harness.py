@@ -12,6 +12,7 @@ from charon.domain.destinations import DestinationPolicy
 from charon.services.api_key_service import ApiKeyService
 from charon.services.auto_downloader import AutoDownloader
 from charon.services.destination_service import DestinationService
+from charon.services.download_folder import DownloadFolder
 from charon.services.download_service import DownloadService
 from charon.services.event_service import EventService
 from charon.services.feed_inbox import FeedInbox
@@ -62,19 +63,13 @@ class Harness:
         rules = RuleService(
             InMemoryRuleStore(), policy, self.events, new_id=SequentialIds("rule"), clock=clock
         )
+        folder = DownloadFolder(self.files, PurePosixPath("/downloads"))
         processor = PostProcessor(
-            self.jobs,
-            rules,
-            self.downloader,
-            self.files,
-            PurePosixPath("/downloads"),
-            policy,
-            self.events,
-            clock,
+            self.jobs, rules, self.downloader, self.files, folder, policy, self.events, clock
         )
-        self.watcher = Watcher(self.jobs, self.downloader, processor, self.events, clock)
+        self.watcher = Watcher(self.jobs, self.downloader, processor, folder, self.events, clock)
         downloads = DownloadService(
-            self.jobs, rules, self.downloader, self.events, clock, SequentialIds("job")
+            self.jobs, rules, self.downloader, folder, self.events, clock, SequentialIds("job")
         )
         idempotency = IdempotencyService(InMemoryIdempotencyStore(), clock)
         self.fetcher = FakeFeedFetcher()

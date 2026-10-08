@@ -5,7 +5,6 @@ from pathlib import PurePosixPath
 
 from charon.domain.destinations import DestinationPolicy
 from charon.domain.models import SYSTEM, ErrorStage, Job, JobError, JobStatus, Rule
-from charon.domain.rename import is_safe_name
 from charon.errors import CharonError
 from charon.ports.clock import Clock, utc_now
 from charon.ports.downloader import Downloader
@@ -13,6 +12,7 @@ from charon.ports.events import EventLog
 from charon.ports.files import FileOps
 from charon.ports.stores import JobStore
 from charon.services.backend import remove_task_best_effort
+from charon.services.download_folder import DownloadFolder
 from charon.services.job_events import record_status_change
 from charon.services.rule_service import RuleService
 
@@ -30,7 +30,7 @@ class PostProcessor:
         rules: RuleService,
         downloader: Downloader,
         files: FileOps,
-        download_dir: PurePosixPath,
+        folder: DownloadFolder,
         policy: DestinationPolicy,
         events: EventLog,
         clock: Clock = utc_now,
@@ -39,7 +39,7 @@ class PostProcessor:
         self._rules = rules
         self._downloader = downloader
         self._files = files
-        self._download_dir = download_dir
+        self._folder = folder
         self._policy = policy
         self._events = events
         self._clock = clock
@@ -90,9 +90,9 @@ class PostProcessor:
         return destination
 
     def _source(self, job: Job) -> PurePosixPath:
-        if job.name is None or not is_safe_name(job.name):
+        source = self._folder.path_of(job)
+        if source is None:
             raise ProcessingError("invalid_name", f"download name {job.name!r} is unusable")
-        source = self._download_dir / job.name
         if not self._files.exists(source):
             raise ProcessingError("source_missing", f"{source} does not exist")
         return source

@@ -82,7 +82,7 @@ class FakeStation:
         return {"list_id": [], "task_id": [t.id for t in tasks]}
 
     def getinfo(self, params: Params) -> dict[str, Any]:
-        found = [self.simulator.get(i) for i in params.get("id", "").split(",")]
+        found = [self.simulator.lookup(i) for i in params.get("id", "").split(",")]
         tasks = [self.simulator.snapshot(t) for t in found if t is not None]
         if not tasks:
             raise ApiFailure(ERR_INVALID_TASK_ID)
