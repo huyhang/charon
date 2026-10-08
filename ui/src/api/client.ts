@@ -16,14 +16,18 @@ import type {
   ListDownloadsQuery,
   ListFeedItemsQuery,
   MarkAllSeenQuery,
+  MetadataProvider,
   Preview,
   PreviewRequest,
   Principal,
+  ProviderKey,
   Role,
   Rule,
   RuleSpec,
   RuleUpdate,
   Submission,
+  TitleSearch,
+  TitleSearchQuery,
 } from "./types";
 
 /**
@@ -76,4 +80,16 @@ export interface CharonClient {
 
   destinationRoots(): Promise<string[]>;
   destinationFolders(path: string): Promise<FolderListing>;
+
+  /** Where canonical titles can be looked up (e.g. TMDB); empty if nowhere is set up. */
+  metadataProviders(): Promise<MetadataProvider[]>;
+  /** Movies and shows matching a title, with the provider to credit for them. */
+  searchTitles(query: TitleSearchQuery): Promise<TitleSearch>;
+  /** Whether a provider has a key and where it comes from (admins). Never the key itself. */
+  providerKey(providerId: string): Promise<ProviderKey>;
+  saveProviderKey(providerId: string, key: string): Promise<ProviderKey>;
+  /** Forget the saved key; one from the environment applies again. */
+  removeProviderKey(providerId: string): Promise<ProviderKey>;
+  /** Forget every remembered title search, so the next ones ask the providers again. */
+  clearTitleCache(): Promise<void>;
 }

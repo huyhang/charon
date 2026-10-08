@@ -33,6 +33,8 @@ services:
       CHARON_DS_PASSWORD: admin
       CHARON_POLL_INTERVAL_SECONDS: "1"
       CHARON_RULE_ROOTS: /library
+      CHARON_TMDB_URL: http://fake-ds:5000/tmdb
+      CHARON_TMDB_TOKEN: dev-tmdb-token
     volumes:
       - ../var/data:/data
       - ../var/downloads:/downloads

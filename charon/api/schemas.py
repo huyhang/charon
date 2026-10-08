@@ -17,11 +17,14 @@ from charon.domain.models import (
     Role,
     RuleSpec,
 )
+from charon.domain.titles import ProviderInfo, TitleMatch
 from charon.hints import hint_for
 from charon.services.api_key_service import IssuedKey
 from charon.services.destination_service import FolderListing
 from charon.services.download_service import JobSummary
 from charon.services.event_service import EventPage
+from charon.services.metadata_service import ProviderSummary
+from charon.services.provider_keys import KeySource, KeyStatus
 from charon.services.rule_service import Preview
 
 
@@ -203,7 +206,8 @@ _ERROR_DESCRIPTIONS = {
     404: "Resource not found",
     409: "Conflicts with the resource's current state",
     422: "Invalid request",
-    502: "The download backend failed or is unreachable",
+    429: "Too many requests for now; see Retry-After",
+    502: "An outside service (the download backend, a metadata provider) failed",
 }
 
 
@@ -245,3 +249,49 @@ class EventListView(BaseModel):
     @classmethod
     def from_page(cls, page: EventPage) -> "EventListView":
         return cls(items=[EventView.from_event(e) for e in page.items], cursor=page.cursor)
+
+
+class TitleSearchView(BaseModel):
+    attribution: ProviderInfo = Field(
+        description="Where the results come from; credit it wherever you show them."
+    )
+    results: list[TitleMatch]
+    stale: bool = Field(
+        default=False,
+        description="The provider couldn't be asked just now, so this is an older answer.",
+    )
+    age_seconds: int = Field(default=0, description="How long ago the provider gave this answer.")
+
+
+class MetadataProviderView(ProviderInfo):
+    configured: bool = Field(description="Whether it has a key, so searches can work.")
+
+    @classmethod
+    def from_summary(cls, summary: ProviderSummary) -> "MetadataProviderView":
+        return cls(**summary.info.model_dump(), configured=summary.configured)
+
+
+class ProviderKeyView(BaseModel):
+    provider: str
+    configured: bool
+    source: KeySource | None = Field(
+        description="settings: saved in Charon. environment: from its setting (e.g. "
+        "CHARON_TMDB_TOKEN), used while none is saved."
+    )
+    hint: str | None = Field(
+        description="The key's last characters, so admins can tell keys apart. The key itself "
+        "is never returned."
+    )
+
+    @classmethod
+    def from_status(cls, provider_id: str, status: KeyStatus) -> "ProviderKeyView":
+        return cls(
+            provider=provider_id,
+            configured=status.configured,
+            source=status.source,
+            hint=status.hint,
+        )
+
+
+class SetProviderKeyRequest(BaseModel):
+    key: str = Field(min_length=1, description="The key the provider issued, e.g. TMDB's token.")

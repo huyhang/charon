@@ -1,7 +1,8 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Principal } from "@/api/types";
-import { ADMIN, CLIENT } from "@/test/factories";
+import { createFakeClient } from "@/test/fakeClient";
+import { ADMIN, CLIENT, TMDB } from "@/test/factories";
 import { renderWithApp } from "@/test/render";
 import { UserMenu } from "./UserMenu";
 
@@ -64,5 +65,27 @@ describe("UserMenu", () => {
     await openMenu(ADMIN);
     await userEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
     await waitFor(() => expect(screen.queryByTestId("signed-in")).not.toBeInTheDocument());
+  });
+
+  it.each([
+    ["credits TMDB with its notice and logo when it is set up", [TMDB], true],
+    ["lists no data sources when none is set up", [], false],
+  ])("About %s", async (_label, providers, credited) => {
+    const client = createFakeClient({ metadataProviders: async () => providers });
+    await renderWithApp(<UserMenu />, { client });
+    await userEvent.click(screen.getByRole("button", { name: "Account and settings" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "About Charon" }));
+    const dialog = await screen.findByRole("dialog", { name: "About Charon" });
+    await waitFor(() => expect(client.metadataProviders).toHaveBeenCalled());
+    const sources = within(dialog).queryByRole("region", { name: "Data sources" });
+    if (credited) {
+      expect(await within(dialog).findByText(TMDB.notice)).toBeInTheDocument();
+      expect(within(dialog).getByRole("img", { name: "TMDB" })).toHaveAttribute(
+        "src",
+        "/tmdb-logo.svg",
+      );
+    } else {
+      expect(sources).not.toBeInTheDocument();
+    }
   });
 });

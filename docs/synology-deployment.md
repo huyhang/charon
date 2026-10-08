@@ -181,6 +181,25 @@ To let rules use another shared folder:
 Only list folders that are mounted. A root that isn't a mount would let files land in the
 container's own filesystem, where they disappear when the container is recreated.
 
+### Optional: look up official titles on TMDB
+
+The rule editor can look up a show's or movie's official title on
+[The Movie Database (TMDB)](https://www.themoviedb.org) and add a step that renames the
+release to it, e.g. *Kusuriya no Hitorigoto* to *The Apothecary Diaries*. TMDB's API is free
+for non-commercial use, with your own key:
+
+1. Create a free account at themoviedb.org, then open **Settings → API** and request an API
+   key for personal use.
+2. Copy the **API Read Access Token** (the long one, not the short "API Key").
+3. After Charon is running (step 7), open its UI as an admin, go to **Settings → Title
+   lookup** and paste the token. Nothing needs restarting. (You can instead set
+   `CHARON_TMDB_TOKEN` in `.env`; a token saved in Settings takes its place.)
+
+`CHARON_TMDB_LANGUAGE` in `.env` picks the language titles come back in (a code such as
+`en-US`, `fr-FR` or `ja`; default `en-US`). Charon never sends TMDB more than 40 requests in
+any 10 seconds. Remove the token in Settings (and leave `CHARON_TMDB_TOKEN` empty) to turn
+lookups off.
+
 ## 7. Build and start the container
 
 Choose either option.
@@ -368,6 +387,10 @@ that:
 | Creating a rule fails with `destination_not_allowed` | The destination is outside `CHARON_RULE_ROOTS`. Add its folder (mounted first) to the roots, or pick a destination inside one. See [Choose where rules may move files](#choose-where-rules-may-move-files). |
 | A job fails with `destination_not_allowed` | The rule predates a change to `CHARON_RULE_ROOTS`, or its folder is a symlink pointing outside the roots. Update the rule, then retry the job. |
 | A moved file vanished after an update | A folder listed in `CHARON_RULE_ROOTS` isn't mounted. See [Choose where rules may move files](#choose-where-rules-may-move-files). |
+| Title lookup asks for a TMDB token | None is set yet. An admin can paste one right there or in **Settings → Title lookup** (see [Optional: look up official titles on TMDB](#optional-look-up-official-titles-on-tmdb)). |
+| Saving the token says `metadata_key_wrong_kind` | That's the short API Key. Copy the **API Read Access Token** (the long one) instead. |
+| Title lookup says `metadata_auth_failed` | TMDB didn't accept the token. Check it in **Settings → Title lookup**: it must be the **API Read Access Token**, not the short API key. |
+| Title lookup says `metadata_unavailable` | Charon couldn't reach `api.themoviedb.org`. From the NAS run `curl -sI https://api.themoviedb.org`. |
 | `401` on every request | Missing or wrong `X-API-Key`, or the key was revoked. `GET /api/v1/auth/me` tells you which key the server sees. |
 | Project won't start | A required setting is missing from `.env`. `docker compose` names it, e.g. `set CHARON_DS_URL`. |
 | Container keeps restarting | Check the log (step 11) for the error. |

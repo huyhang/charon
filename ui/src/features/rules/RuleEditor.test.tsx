@@ -1,10 +1,10 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ApiError } from "@/api/errors";
 import { Toaster } from "@/components/ui/sonner";
 import { emptySpec } from "@/lib/rules";
 import { createFakeClient } from "@/test/fakeClient";
-import { makeRule } from "@/test/factories";
+import { makeJob, makeRule, makeTitle, TMDB } from "@/test/factories";
 import { renderWithApp } from "@/test/render";
 import { RuleEditor, type EditorTarget } from "./RuleEditor";
 
@@ -239,5 +239,83 @@ describe("RuleEditor", () => {
       name: "Show.XYZ.mkv",
       rule: expect.objectContaining({ pattern: "*S0?E*", destination: "/library/tv" }),
     });
+  });
+
+  it("renames a feed release's title to the official one picked from TMDB", async () => {
+    const sample = "Kusuriya no Hitorigoto - 24 (1080p).mkv";
+    const client = createFakeClient({
+      metadataProviders: async () => [TMDB],
+      searchTitles: async () => ({
+        attribution: TMDB,
+        results: [makeTitle()],
+        stale: false,
+        age_seconds: 0,
+      }),
+    });
+    const target: EditorTarget = {
+      mode: "create",
+      spec: { ...CREATE.spec, name: "Kusuriya no Hitorigoto", pattern: "Kusuriya no Hitorigoto*" },
+      sample,
+    };
+    await renderWithApp(<RuleEditor target={target} onClose={() => {}} />, { client });
+    await userEvent.click(await screen.findByRole("button", { name: "Look up official title" }));
+    const dialog = await screen.findByRole("dialog", { name: "Look up the official title" });
+    await userEvent.click(
+      await within(dialog).findByRole("button", { name: "Use The Apothecary Diaries" }),
+    );
+    expect(screen.getByLabelText("Name")).toHaveValue("The Apothecary Diaries");
+    expect(screen.getByLabelText("Step 1 find")).toHaveValue("Kusuriya no Hitorigoto");
+    expect(screen.getByLabelText("Step 1 replace")).toHaveValue("The Apothecary Diaries");
+    expect(screen.getByLabelText("Sample name")).toHaveValue(sample);
+  });
+
+  it.each<[string, EditorTarget, string, string | null]>([
+    ["from scratch, even with recent downloads", CREATE, "", null],
+    [
+      "from a feed item",
+      { ...CREATE, sample: "Kusuriya.no.Hitorigoto.S02E12.mkv" },
+      "Kusuriya no Hitorigoto",
+      "Kusuriya.no.Hitorigoto",
+    ],
+  ])("starts the title lookup %s", async (_label, target, query, replaces) => {
+    const client = createFakeClient({
+      listDownloads: async () => ({
+        items: [makeJob({ name: "Severance.S02E04.1080p.WEB-DL.mkv" })],
+        next_cursor: null,
+      }),
+      metadataProviders: async () => [TMDB],
+      searchTitles: async () => ({
+        attribution: TMDB,
+        results: [makeTitle()],
+        stale: false,
+        age_seconds: 0,
+      }),
+    });
+    await renderWithApp(<RuleEditor target={target} onClose={() => {}} />, { client });
+    // The test bench still tries the newest download when nothing is typed.
+    await waitFor(() =>
+      expect(screen.getByLabelText("Sample name")).toHaveAttribute(
+        "placeholder",
+        "Severance.S02E04.1080p.WEB-DL.mkv",
+      ),
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "Look up official title" }));
+    const dialog = await screen.findByRole("dialog", { name: "Look up the official title" });
+    expect(within(dialog).getByLabelText("Title to look up")).toHaveValue(query);
+    if (replaces) {
+      expect(within(dialog).getByText(replaces)).toBeInTheDocument();
+    } else {
+      expect(within(dialog).queryByText(/Replaces/)).not.toBeInTheDocument();
+      expect(within(dialog).getByText("Type a title to look it up.")).toBeInTheDocument();
+    }
+  });
+
+  it("offers no title lookup when no provider is set up", async () => {
+    const client = createFakeClient();
+    await renderWithApp(<RuleEditor target={CREATE} onClose={() => {}} />, { client });
+    await waitFor(() => expect(client.metadataProviders).toHaveBeenCalled());
+    expect(
+      screen.queryByRole("button", { name: "Look up official title" }),
+    ).not.toBeInTheDocument();
   });
 });

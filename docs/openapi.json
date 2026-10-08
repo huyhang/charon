@@ -1162,6 +1162,23 @@
         "title": "JobView",
         "type": "object"
       },
+      "KeySource": {
+        "enum": [
+          "settings",
+          "environment"
+        ],
+        "title": "KeySource",
+        "type": "string"
+      },
+      "KindFilter": {
+        "enum": [
+          "any",
+          "movie",
+          "tv"
+        ],
+        "title": "KindFilter",
+        "type": "string"
+      },
       "MarkAllSeenRequest": {
         "properties": {
           "feed_id": {
@@ -1255,6 +1272,41 @@
         ],
         "title": "MatchType",
         "type": "string"
+      },
+      "MetadataProviderView": {
+        "properties": {
+          "configured": {
+            "description": "Whether it has a key, so searches can work.",
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notice": {
+            "description": "The attribution notice the provider requires.",
+            "title": "Notice",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "url",
+          "notice",
+          "configured"
+        ],
+        "title": "MetadataProviderView",
+        "type": "object"
       },
       "PreviewRequest": {
         "properties": {
@@ -1477,6 +1529,79 @@
           }
         },
         "title": "Progress",
+        "type": "object"
+      },
+      "ProviderInfo": {
+        "description": "Who a provider is, and how to credit it wherever its data is shown.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notice": {
+            "description": "The attribution notice the provider requires.",
+            "title": "Notice",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "url",
+          "notice"
+        ],
+        "title": "ProviderInfo",
+        "type": "object"
+      },
+      "ProviderKeyView": {
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The key's last characters, so admins can tell keys apart. The key itself is never returned.",
+            "title": "Hint"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KeySource"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "settings: saved in Charon. environment: from its setting (e.g. CHARON_TMDB_TOKEN), used while none is saved."
+          }
+        },
+        "required": [
+          "provider",
+          "configured",
+          "source",
+          "hint"
+        ],
+        "title": "ProviderKeyView",
         "type": "object"
       },
       "RenameOp": {
@@ -1744,6 +1869,21 @@
         "title": "RuleUpdate",
         "type": "object"
       },
+      "SetProviderKeyRequest": {
+        "properties": {
+          "key": {
+            "description": "The key the provider issued, e.g. TMDB's token.",
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "title": "SetProviderKeyRequest",
+        "type": "object"
+      },
       "SubmitDownloadRequest": {
         "properties": {
           "magnet": {
@@ -1766,6 +1906,108 @@
           "magnet"
         ],
         "title": "SubmitDownloadRequest",
+        "type": "object"
+      },
+      "TitleKind": {
+        "enum": [
+          "movie",
+          "tv"
+        ],
+        "title": "TitleKind",
+        "type": "string"
+      },
+      "TitleMatch": {
+        "description": "A movie or show a provider knows, under its canonical name.",
+        "properties": {
+          "id": {
+            "description": "The provider's id for it.",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TitleKind"
+          },
+          "original_title": {
+            "description": "The name in its original language.",
+            "title": "Original Title",
+            "type": "string"
+          },
+          "overview": {
+            "default": "",
+            "title": "Overview",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Which provider it came from, e.g. tmdb.",
+            "title": "Provider",
+            "type": "string"
+          },
+          "title": {
+            "description": "The canonical name, in the provider's configured language.",
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "description": "Its page on the provider's site.",
+            "title": "Url",
+            "type": "string"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Release or first-air year, if known.",
+            "title": "Year"
+          }
+        },
+        "required": [
+          "provider",
+          "id",
+          "kind",
+          "title",
+          "original_title",
+          "year",
+          "url"
+        ],
+        "title": "TitleMatch",
+        "type": "object"
+      },
+      "TitleSearchView": {
+        "properties": {
+          "age_seconds": {
+            "default": 0,
+            "description": "How long ago the provider gave this answer.",
+            "title": "Age Seconds",
+            "type": "integer"
+          },
+          "attribution": {
+            "$ref": "#/components/schemas/ProviderInfo",
+            "description": "Where the results come from; credit it wherever you show them."
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/TitleMatch"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "stale": {
+            "default": false,
+            "description": "The provider couldn't be asked just now, so this is an older answer.",
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "attribution",
+          "results"
+        ],
+        "title": "TitleSearchView",
         "type": "object"
       }
     },
@@ -2441,7 +2683,7 @@
                 }
               }
             },
-            "description": "The download backend failed or is unreachable"
+            "description": "An outside service (the download backend, a metadata provider) failed"
           }
         },
         "security": [
@@ -2717,7 +2959,7 @@
                 }
               }
             },
-            "description": "The download backend failed or is unreachable"
+            "description": "An outside service (the download backend, a metadata provider) failed"
           }
         },
         "security": [
@@ -3370,7 +3612,7 @@
                 }
               }
             },
-            "description": "The download backend failed or is unreachable"
+            "description": "An outside service (the download backend, a metadata provider) failed"
           }
         },
         "security": [
@@ -3915,6 +4157,499 @@
         "summary": "Get Health",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/api/v1/metadata/cache": {
+      "delete": {
+        "description": "Forget every remembered answer, so the next searches ask the providers again.",
+        "operationId": "clearMetadataCache",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The key's role does not allow this action"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Clear Metadata Cache",
+        "tags": [
+          "metadata"
+        ]
+      }
+    },
+    "/api/v1/metadata/providers": {
+      "get": {
+        "description": "The providers Charon can look canonical titles up on, and whether each has a key.",
+        "operationId": "listMetadataProviders",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MetadataProviderView"
+                  },
+                  "title": "Response Listmetadataproviders",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "List Metadata Providers",
+        "tags": [
+          "metadata"
+        ]
+      }
+    },
+    "/api/v1/metadata/providers/{provider_id}/key": {
+      "delete": {
+        "description": "Forget the saved key. One from the environment applies again; without it, lookups stop.",
+        "operationId": "clearProviderKey",
+        "parameters": [
+          {
+            "description": "A provider id from /metadata/providers, e.g. tmdb.",
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "description": "A provider id from /metadata/providers, e.g. tmdb.",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderKeyView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The key's role does not allow this action"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Clear Provider Key",
+        "tags": [
+          "metadata"
+        ]
+      },
+      "get": {
+        "description": "Whether the provider has a key, and where it comes from. Never the key itself.",
+        "operationId": "getProviderKey",
+        "parameters": [
+          {
+            "description": "A provider id from /metadata/providers, e.g. tmdb.",
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "description": "A provider id from /metadata/providers, e.g. tmdb.",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderKeyView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The key's role does not allow this action"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Get Provider Key",
+        "tags": [
+          "metadata"
+        ]
+      },
+      "put": {
+        "description": "Save the provider's key in Charon. It takes the place of one from the environment.",
+        "operationId": "setProviderKey",
+        "parameters": [
+          {
+            "description": "A provider id from /metadata/providers, e.g. tmdb.",
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "description": "A provider id from /metadata/providers, e.g. tmdb.",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetProviderKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderKeyView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The key's role does not allow this action"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Set Provider Key",
+        "tags": [
+          "metadata"
+        ]
+      }
+    },
+    "/api/v1/metadata/search": {
+      "get": {
+        "description": "Movies and shows matching `q`, best first, under their canonical names.\n\nShow `attribution` wherever you show the results: providers require it. Answers are\nremembered; when the provider can't be asked, an older one may come back with `stale`.",
+        "operationId": "searchTitles",
+        "parameters": [
+          {
+            "description": "A title, in any language.",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "description": "A title, in any language.",
+              "maxLength": 200,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "description": "A provider id from /metadata/providers.",
+            "in": "query",
+            "name": "provider",
+            "required": false,
+            "schema": {
+              "default": "tmdb",
+              "description": "A provider id from /metadata/providers.",
+              "title": "Provider",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/KindFilter",
+              "default": "any"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Ask the provider again, even if Charon remembers an answer.",
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Ask the provider again, even if Charon remembers an answer.",
+              "title": "Refresh",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TitleSearchView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked API key"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflicts with the resource's current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Too many requests for now; see Retry-After"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "An outside service (the download backend, a metadata provider) failed"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Search Titles",
+        "tags": [
+          "metadata"
         ]
       }
     },

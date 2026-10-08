@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
 import { FakeFeedsSection } from "./FakeFeedsSection";
+import { FakeTmdbSection } from "./FakeTmdbSection";
 import { createHttpSimulator, taskPercent, type SimulatorClient } from "./simulatorClient";
 
 const FAILURE_DETAIL = "broken_link";
@@ -129,6 +130,7 @@ export default function SimulatorPanel({
           </ul>
         </div>
         <FakeFeedsSection simulator={simulator} open={open} />
+        <FakeTmdbSection simulator={simulator} open={open} />
         <div className="grid grid-cols-2 gap-2 border-t p-2">
           <Button
             size="sm"

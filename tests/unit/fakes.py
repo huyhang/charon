@@ -13,7 +13,8 @@ from charon.domain.destinations import DestinationPolicy, normalize
 from charon.domain.events import Event, EventType
 from charon.domain.feeds import Feed, FeedItem
 from charon.domain.models import Actor, ApiKey, IdempotencyRecord, Job, JobStatus, Rule
-from charon.errors import DownloaderError, FeedError
+from charon.domain.titles import Answer, TitleKind, TitleMatch
+from charon.errors import DownloaderError, FeedError, RateLimitedError
 from charon.ports.downloader import BackendTask
 from charon.ports.feeds import FetchedFeed
 from charon.ports.stores import ItemCursor, ItemFilter, JobCursor, UnreadCounts
@@ -157,6 +158,20 @@ class InMemoryEventStore:
         pruned = len(self.events) - len(kept)
         self.events = kept
         return pruned
+
+
+class InMemorySettingsStore:
+    def __init__(self, values: Mapping[str, str] | None = None) -> None:
+        self.values = dict(values or {})
+
+    def get(self, name: str) -> str | None:
+        return self.values.get(name)
+
+    def set(self, name: str, value: str) -> None:
+        self.values[name] = value
+
+    def delete(self, name: str) -> bool:
+        return self.values.pop(name, None) is not None
 
 
 class InMemoryIdempotencyStore:
@@ -463,3 +478,74 @@ def make_rule(**overrides: object) -> Rule:
         "created_at": T0,
     }
     return Rule.model_validate({**fields, **overrides})
+
+
+def make_title(**overrides: object) -> TitleMatch:
+    fields: dict[str, object] = {
+        "provider": "tmdb",
+        "id": "220542",
+        "kind": TitleKind.TV,
+        "title": "The Apothecary Diaries",
+        "original_title": "薬屋のひとりごと",
+        "year": 2023,
+        "url": "https://www.themoviedb.org/tv/220542",
+    }
+    return TitleMatch.model_validate({**fields, **overrides})
+
+
+class FakeTitleProvider:
+    """A MetadataProvider, BudgetedProvider and TitleLookup answering with `matches`.
+
+    It raises `error` if set; search_now refuses (without asking) while `budget_free` is False.
+    `sent` records which of search / search_now reached it.
+    """
+
+    def __init__(self, matches: Sequence[TitleMatch] = ()) -> None:
+        self.matches = list(matches)
+        self.error: Exception | None = None
+        self.budget_free = True
+        self.queries: list[str] = []
+        self.sent: list[str] = []
+        # What lookup() reports, and what it was asked.
+        self.stale = False
+        self.age_seconds = 0.0
+        self.refreshes: list[bool] = []
+        self.cleared = 0
+
+    def search(self, query: str) -> list[TitleMatch]:
+        self.sent.append("search")
+        return self._answer(query)
+
+    def search_now(self, query: str) -> list[TitleMatch]:
+        self.sent.append("search_now")
+        if not self.budget_free:
+            raise RateLimitedError("metadata_rate_limited", "no room right now")
+        return self._answer(query)
+
+    def lookup(self, query: str, refresh: bool = False) -> Answer:
+        self.refreshes.append(refresh)
+        return Answer(self._answer(query), self.age_seconds, self.stale)
+
+    def clear(self) -> None:
+        self.cleared += 1
+
+    def _answer(self, query: str) -> list[TitleMatch]:
+        self.queries.append(query)
+        if self.error is not None:
+            raise self.error
+        return list(self.matches)
+
+
+class FakeTime:
+    """A monotonic clock and a sleep that only moves it, for rate-limit tests."""
+
+    def __init__(self, start: float = 1000.0) -> None:
+        self.now = start
+        self.slept: list[float] = []
+
+    def __call__(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.now += seconds

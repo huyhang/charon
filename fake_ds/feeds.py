@@ -85,6 +85,8 @@ def sample_feeds(now: datetime) -> dict[str, FakeFeed]:
             FakeFeedItem(expanse, _ago(now, minutes=30), int(2.1 * GIB)),
             FakeFeedItem("[SubsPlease] Dandadan - 05 (1080p).mkv", _ago(now, hours=6)),
             FakeFeedItem("One.Piece.Film.Red.2022.1080p.mkv", _ago(now, days=2), 3 * GIB),
+            # No sample rule files it; its canonical title is a lookup away (fake TMDB).
+            FakeFeedItem("Kusuriya no Hitorigoto - 24 (1080p).mkv", _ago(now, days=2, hours=4)),
         ],
     )
     return {feed.slug: feed for feed in (tv, anime)}

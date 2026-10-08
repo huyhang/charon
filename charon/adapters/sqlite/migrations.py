@@ -83,12 +83,18 @@ def _feeds(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX feed_item_sources_feed ON feed_item_sources (feed_id)")
 
 
+def _settings(conn: sqlite3.Connection) -> None:
+    # Small named settings changed while Charon runs, e.g. a metadata provider's API key.
+    conn.execute("CREATE TABLE settings (name TEXT PRIMARY KEY, value TEXT NOT NULL)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     _job_info_hash,
     _rule_version,
     _events,
     _idempotency_keys,
     _feeds,
+    _settings,
 )
 
 

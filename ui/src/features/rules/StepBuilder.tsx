@@ -1,4 +1,5 @@
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import type { ReactNode } from "react";
 import type { RenameStep, RuleSpec } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,8 @@ interface StepBuilderProps {
   spec: RuleSpec;
   onChange(spec: RuleSpec): void;
   errors: Record<string, string>;
+  /** More ways to add steps, shown beside "Add step". */
+  actions?: ReactNode;
 }
 
 const OPS: { value: RenameStep["op"]; label: string }[] = [
@@ -23,7 +26,7 @@ const OPS: { value: RenameStep["op"]; label: string }[] = [
   { value: "regex_replace", label: "Replace regex" },
 ];
 
-export function StepBuilder({ spec, onChange, errors }: StepBuilderProps) {
+export function StepBuilder({ spec, onChange, errors, actions }: StepBuilderProps) {
   const steps = spec.steps ?? [];
   return (
     <div className="space-y-2">
@@ -128,9 +131,12 @@ export function StepBuilder({ spec, onChange, errors }: StepBuilderProps) {
           );
         })}
       </ol>
-      <Button type="button" variant="outline" size="sm" onClick={() => onChange(addStep(spec))}>
-        <PlusIcon /> Add step
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={() => onChange(addStep(spec))}>
+          <PlusIcon /> Add step
+        </Button>
+        {actions}
+      </div>
     </div>
   );
 }

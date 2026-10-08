@@ -29,6 +29,10 @@ services:
       CHARON_CORS_ORIGINS: ${CHARON_CORS_ORIGINS:-}
       # Container directories rules may move files into (comma-separated).
       CHARON_RULE_ROOTS: ${CHARON_RULE_ROOTS:-/media}
+      # Optional: your TMDB API Read Access Token, for looking up canonical titles. Admins
+      # can save one in the UI (Settings) instead, which takes its place.
+      CHARON_TMDB_TOKEN: ${CHARON_TMDB_TOKEN:-}
+      CHARON_TMDB_LANGUAGE: ${CHARON_TMDB_LANGUAGE:-en-US}
       # To serve a built UI at /, mount it and set: CHARON_UI_DIR: /ui
     volumes:
       # Charon's database.

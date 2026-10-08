@@ -6,7 +6,7 @@ import { createFakeClient, type FakeClient } from "@/test/fakeClient";
 import { makeFeed } from "@/test/factories";
 import { renderWithApp } from "@/test/render";
 import SimulatorPanel from "./SimulatorPanel";
-import type { FakeFeed, FakeTask, SimulatorClient } from "./simulatorClient";
+import type { FakeFeed, FakeTask, FakeTmdbState, SimulatorClient } from "./simulatorClient";
 
 function task(id: string, title: string, status: string, downloaded = "0"): FakeTask {
   return {
@@ -25,6 +25,14 @@ const TASKS = [
   task("dbid_3", "Broken.mkv", "error"),
 ];
 
+const TMDB_OK: FakeTmdbState = {
+  mode: "ok",
+  requests: 12,
+  busiest_window: 7,
+  limit: 40,
+  window_seconds: 10,
+};
+
 function fakeSimulator(overrides: Partial<SimulatorClient> = {}) {
   return {
     listTasks: vi.fn(async () => TASKS),
@@ -36,6 +44,8 @@ function fakeSimulator(overrides: Partial<SimulatorClient> = {}) {
     publish: vi.fn(async () => {}),
     breakFeed: vi.fn(async () => {}),
     healFeed: vi.fn(async () => {}),
+    tmdbState: vi.fn(async (): Promise<FakeTmdbState> => TMDB_OK),
+    setTmdbMode: vi.fn(async () => {}),
     ...overrides,
   };
 }
@@ -217,5 +227,58 @@ describe("SimulatorPanel", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  describe("fake TMDB", () => {
+    const tmdbSection = async (panel: HTMLElement) =>
+      within(panel).findByRole("region", { name: "Fake TMDB" });
+
+    it("shows how busy Charon has kept it", async () => {
+      const { panel } = await openPanel(fakeSimulator());
+      const section = await tmdbSection(panel);
+      expect(within(section).getByText("ok")).toBeInTheDocument();
+      expect(
+        within(section).getByText("12 request(s) · busiest 10 s: 7 of 40"),
+      ).toBeInTheDocument();
+    });
+
+    it("flags a window busier than the limit", async () => {
+      const over = { ...TMDB_OK, busiest_window: 41 };
+      const { panel } = await openPanel(fakeSimulator({ tmdbState: async () => over }));
+      const section = await tmdbSection(panel);
+      expect(within(section).getByText(/busiest 10 s: 41 of 40/)).toHaveClass("text-destructive");
+    });
+
+    it.each<[FakeTmdbState["mode"], string, FakeTmdbState["mode"], string]>([
+      ["ok", "Throttle (429)", "throttled", "Fake TMDB now answers 429"],
+      ["ok", "Down (503)", "down", "Fake TMDB is down"],
+      ["down", "Heal", "ok", "Fake TMDB healed"],
+    ])("when %s: %s", async (mode, button, next, message) => {
+      const simulator = fakeSimulator({ tmdbState: vi.fn(async () => ({ ...TMDB_OK, mode })) });
+      const { panel } = await openPanel(simulator);
+      await userEvent.click(within(await tmdbSection(panel)).getByRole("button", { name: button }));
+      expect(await findToast(message)).toBeInTheDocument();
+      expect(simulator.setTmdbMode).toHaveBeenCalledWith(next);
+    });
+
+    it("explains an action the fake refused", async () => {
+      const simulator = fakeSimulator({
+        setTmdbMode: async () => Promise.reject(new Error("Fake answered 500")),
+      });
+      const { panel } = await openPanel(simulator);
+      await userEvent.click(
+        within(await tmdbSection(panel)).getByRole("button", { name: "Down (503)" }),
+      );
+      expect(await findToast("Simulator action failed")).toHaveTextContent("Fake answered 500");
+    });
+
+    it("hides itself when the fake has no TMDB", async () => {
+      const simulator = fakeSimulator({
+        tmdbState: async () => Promise.reject(new Error("Fake answered 404")),
+      });
+      const { panel } = await openPanel(simulator);
+      await waitFor(() => expect(simulator.listTasks).toHaveBeenCalled());
+      expect(within(panel).queryByRole("region", { name: "Fake TMDB" })).not.toBeInTheDocument();
+    });
   });
 });

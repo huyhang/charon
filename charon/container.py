@@ -11,6 +11,7 @@ from charon.services.feed_inbox import FeedInbox
 from charon.services.feed_service import FeedService
 from charon.services.housekeeper import Housekeeper
 from charon.services.idempotency_service import IdempotencyService
+from charon.services.metadata_service import MetadataService
 from charon.services.rule_service import RuleService
 from charon.services.watcher import Watcher
 
@@ -30,6 +31,7 @@ class Container:
     downloader: Downloader
     watcher: Watcher
     housekeeper: Housekeeper
+    metadata_service: MetadataService
     poll_interval_seconds: float | None = None
     feed_poll_interval_seconds: float | None = None
     housekeeping_interval_seconds: float | None = None

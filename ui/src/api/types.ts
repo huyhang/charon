@@ -32,6 +32,15 @@ export type FeedPreview = Schemas["FeedPreviewView"];
 export type FeedSummary = Schemas["FeedSummaryView"];
 export type MatchFilter = Schemas["MatchFilter"];
 export type Problem = Schemas["ProblemView"];
+/** Who a metadata provider is, and how to credit it. */
+export type ProviderInfo = Schemas["ProviderInfo"];
+/** A provider Charon knows, and whether it has a key so lookups can work. */
+export type MetadataProvider = Schemas["MetadataProviderView"];
+export type ProviderKey = Schemas["ProviderKeyView"];
+export type TitleMatch = Schemas["TitleMatch"];
+export type TitleKind = Schemas["TitleKind"];
+export type KindFilter = Schemas["KindFilter"];
+export type TitleSearch = Schemas["TitleSearchView"];
 
 export interface ListDownloadsQuery {
   status?: JobStatus[];
@@ -51,6 +60,14 @@ export interface MarkAllSeenQuery {
   feedId?: string | null;
   match?: MatchFilter;
   q?: string;
+}
+
+export interface TitleSearchQuery {
+  q: string;
+  provider?: string;
+  kind?: KindFilter;
+  /** Ask the provider again even if Charon remembers an answer. */
+  refresh?: boolean;
 }
 
 export interface ListFeedItemsQuery {

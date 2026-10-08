@@ -1,5 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// Specs that change settings every other spec relies on.
+const SHARED_SETTINGS = /settings\.spec\.ts/;
+
 // Runs against an already running `make ui-dev` (UI + Charon + fake Download Station).
 export default defineConfig({
   testDir: "./e2e",
@@ -11,5 +14,14 @@ export default defineConfig({
     baseURL: process.env.UI_URL ?? "http://localhost:5173",
     trace: "retain-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"] }, testIgnore: SHARED_SETTINGS },
+    // Changes settings every other test relies on (e.g. TMDB's token), so it runs after them.
+    {
+      name: "settings",
+      use: { ...devices["Desktop Chrome"] },
+      testMatch: SHARED_SETTINGS,
+      dependencies: ["chromium"],
+    },
+  ],
 });

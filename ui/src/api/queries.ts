@@ -32,6 +32,7 @@ import type {
   Role,
   Rule,
   RuleUpdate,
+  TitleSearchQuery,
 } from "./types";
 
 export const queryKeys = {
@@ -54,6 +55,10 @@ export const queryKeys = {
   feedItemList: (query: ListFeedItemsQuery) => ["feeds", "items", query] as const,
   feedSummary: ["feeds", "summary"] as const,
   feedPreview: (url: string) => ["feed-preview", url] as const,
+  metadataProviders: ["metadata", "providers"] as const,
+  titleSearches: ["metadata", "search"] as const,
+  titleSearch: (query: TitleSearchQuery) => ["metadata", "search", query] as const,
+  providerKey: (providerId: string) => ["metadata", "key", providerId] as const,
 };
 
 const FEEDS_POLL_MS = 30000;
@@ -324,6 +329,88 @@ export function useFeedPreview(url: string | null) {
     enabled: url !== null,
     retry: false,
     staleTime: 30000,
+  });
+}
+
+/** The title providers Charon knows, and whether each has a key (changed in Settings). */
+export function useMetadataProviders() {
+  const client = useClient();
+  return useQuery({
+    queryKey: queryKeys.metadataProviders,
+    queryFn: () => client.metadataProviders(),
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * Looks titles up. Answers are kept for the session, so going back to an earlier search
+ * costs Charon none of its request budget with the provider.
+ */
+export function useTitleSearch(query: TitleSearchQuery | null) {
+  const client = useClient();
+  return useQuery({
+    queryKey: queryKeys.titleSearch(query ?? { q: "" }),
+    queryFn: () => client.searchTitles(query!),
+    enabled: query !== null,
+    placeholderData: keepPreviousData,
+    retry: false,
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * Asks the provider again for a search shown from Charon's memory, and shows the new answer.
+ * `query` is the search as shown (without `refresh`), so the new answer takes its place.
+ */
+export function useRefreshTitleSearch() {
+  const client = useClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (query: TitleSearchQuery) => client.searchTitles({ ...query, refresh: true }),
+    onSuccess: (found, query) => queryClient.setQueryData(queryKeys.titleSearch(query), found),
+  });
+}
+
+/** Admins only: whether a provider has a key, and where it comes from. */
+export function useProviderKey(providerId: string) {
+  const client = useClient();
+  return useQuery({
+    queryKey: queryKeys.providerKey(providerId),
+    queryFn: () => client.providerKey(providerId),
+  });
+}
+
+/** A key change also changes whether lookups work, and what earlier searches could answer. */
+function useInvalidateKey(providerId: string) {
+  return useInvalidate(
+    queryKeys.providerKey(providerId),
+    queryKeys.metadataProviders,
+    queryKeys.titleSearches,
+  );
+}
+
+export function useSaveProviderKey(providerId: string) {
+  const client = useClient();
+  const onSuccess = useInvalidateKey(providerId);
+  return useMutation({
+    mutationFn: (key: string) => client.saveProviderKey(providerId, key),
+    onSuccess,
+  });
+}
+
+export function useRemoveProviderKey(providerId: string) {
+  const client = useClient();
+  const onSuccess = useInvalidateKey(providerId);
+  return useMutation({ mutationFn: () => client.removeProviderKey(providerId), onSuccess });
+}
+
+export function useClearTitleCache() {
+  const client = useClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => client.clearTitleCache(),
+    // The browser's own copies go too, so the next searches really ask again.
+    onSuccess: () => queryClient.removeQueries({ queryKey: queryKeys.titleSearches }),
   });
 }
 

@@ -55,6 +55,22 @@ describe("createHttpSimulator", () => {
       { url: "/_fake/_control/feeds/tv/break", method: "POST", body: { mode: "bad_xml" } },
     ],
     ["healFeed", (s) => s.healFeed("tv"), { url: "/_fake/_control/feeds/tv/heal", method: "POST" }],
+    ["tmdbState", (s) => s.tmdbState(), { url: "/_fake/_control/tmdb", method: "GET" }],
+    [
+      "setTmdbMode throttled",
+      (s) => s.setTmdbMode("throttled"),
+      { url: "/_fake/_control/tmdb/throttle", method: "POST" },
+    ],
+    [
+      "setTmdbMode down",
+      (s) => s.setTmdbMode("down"),
+      { url: "/_fake/_control/tmdb/down", method: "POST" },
+    ],
+    [
+      "setTmdbMode ok",
+      (s) => s.setTmdbMode("ok"),
+      { url: "/_fake/_control/tmdb/heal", method: "POST" },
+    ],
   ])("%s", async (_, call, expected) => {
     const fake = fakeFetch();
     await call(createHttpSimulator("/_fake", fake.fn));

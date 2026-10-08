@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { Navigate, type RouteObject } from "react-router";
+import type { Principal } from "@/api/types";
 import { usePrincipal } from "@/auth/AuthProvider";
+import { canChangeSettings, canManageKeys } from "@/auth/permissions";
 import { EmptyState } from "@/components/EmptyState";
 import { Splash } from "@/components/Splash";
 import { Button } from "@/components/ui/button";
@@ -8,10 +10,9 @@ import { DownloadsPage } from "@/features/downloads/DownloadsPage";
 import { CompassIcon } from "lucide-react";
 import { Link } from "react-router";
 import { AppShell } from "./AppShell";
-import { canManageKeys } from "./nav";
 
-function AdminOnly({ children }: { children: ReactNode }) {
-  return canManageKeys(usePrincipal()) ? children : <Navigate to="/downloads" replace />;
+function Allowed({ when, children }: { when(principal: Principal): boolean; children: ReactNode }) {
+  return when(usePrincipal()) ? children : <Navigate to="/downloads" replace />;
 }
 
 function NotFound() {
@@ -52,9 +53,22 @@ export function routes(devTools?: ReactNode): RouteObject[] {
             const { KeysPage } = await import("@/features/keys/KeysPage");
             return {
               element: (
-                <AdminOnly>
+                <Allowed when={canManageKeys}>
                   <KeysPage />
-                </AdminOnly>
+                </Allowed>
+              ),
+            };
+          },
+        },
+        {
+          path: "settings",
+          lazy: async () => {
+            const { SettingsPage } = await import("@/features/settings/SettingsPage");
+            return {
+              element: (
+                <Allowed when={canChangeSettings}>
+                  <SettingsPage />
+                </Allowed>
               ),
             };
           },

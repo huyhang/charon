@@ -465,6 +465,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/metadata/cache": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Clear Metadata Cache
+         * @description Forget every remembered answer, so the next searches ask the providers again.
+         */
+        delete: operations["clearMetadataCache"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/metadata/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Metadata Providers
+         * @description The providers Charon can look canonical titles up on, and whether each has a key.
+         */
+        get: operations["listMetadataProviders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/metadata/providers/{provider_id}/key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Provider Key
+         * @description Whether the provider has a key, and where it comes from. Never the key itself.
+         */
+        get: operations["getProviderKey"];
+        /**
+         * Set Provider Key
+         * @description Save the provider's key in Charon. It takes the place of one from the environment.
+         */
+        put: operations["setProviderKey"];
+        post?: never;
+        /**
+         * Clear Provider Key
+         * @description Forget the saved key. One from the environment applies again; without it, lookups stop.
+         */
+        delete: operations["clearProviderKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/metadata/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Titles
+         * @description Movies and shows matching `q`, best first, under their canonical names.
+         *
+         *     Show `attribution` wherever you show the results: providers require it. Answers are
+         *     remembered; when the provider can't be asked, an older one may come back with `stale`.
+         */
+        get: operations["searchTitles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/rules": {
         parameters: {
             query?: never;
@@ -1039,6 +1130,16 @@ export interface components {
              */
             updated_at: string;
         };
+        /**
+         * KeySource
+         * @enum {string}
+         */
+        KeySource: "settings" | "environment";
+        /**
+         * KindFilter
+         * @enum {string}
+         */
+        KindFilter: "any" | "movie" | "tv";
         /** MarkAllSeenRequest */
         MarkAllSeenRequest: {
             /**
@@ -1086,6 +1187,25 @@ export interface components {
          * @enum {string}
          */
         MatchType: "glob" | "regex";
+        /** MetadataProviderView */
+        MetadataProviderView: {
+            /**
+             * Configured
+             * @description Whether it has a key, so searches can work.
+             */
+            configured: boolean;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Notice
+             * @description The attribution notice the provider requires.
+             */
+            notice: string;
+            /** Url */
+            url: string;
+        };
         /** PreviewRequest */
         PreviewRequest: {
             /** Name */
@@ -1163,6 +1283,37 @@ export interface components {
             percent: number;
             /** Size Bytes */
             size_bytes?: number | null;
+        };
+        /**
+         * ProviderInfo
+         * @description Who a provider is, and how to credit it wherever its data is shown.
+         */
+        ProviderInfo: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Notice
+             * @description The attribution notice the provider requires.
+             */
+            notice: string;
+            /** Url */
+            url: string;
+        };
+        /** ProviderKeyView */
+        ProviderKeyView: {
+            /** Configured */
+            configured: boolean;
+            /**
+             * Hint
+             * @description The key's last characters, so admins can tell keys apart. The key itself is never returned.
+             */
+            hint: string | null;
+            /** Provider */
+            provider: string;
+            /** @description settings: saved in Charon. environment: from its setting (e.g. CHARON_TMDB_TOKEN), used while none is saved. */
+            source: components["schemas"]["KeySource"] | null;
         };
         /**
          * RenameOp
@@ -1303,12 +1454,86 @@ export interface components {
              */
             version?: number | null;
         };
+        /** SetProviderKeyRequest */
+        SetProviderKeyRequest: {
+            /**
+             * Key
+             * @description The key the provider issued, e.g. TMDB's token.
+             */
+            key: string;
+        };
         /** SubmitDownloadRequest */
         SubmitDownloadRequest: {
             /** Magnet */
             magnet: string;
             /** Rule Id */
             rule_id?: string | null;
+        };
+        /**
+         * TitleKind
+         * @enum {string}
+         */
+        TitleKind: "movie" | "tv";
+        /**
+         * TitleMatch
+         * @description A movie or show a provider knows, under its canonical name.
+         */
+        TitleMatch: {
+            /**
+             * Id
+             * @description The provider's id for it.
+             */
+            id: string;
+            kind: components["schemas"]["TitleKind"];
+            /**
+             * Original Title
+             * @description The name in its original language.
+             */
+            original_title: string;
+            /**
+             * Overview
+             * @default
+             */
+            overview: string;
+            /**
+             * Provider
+             * @description Which provider it came from, e.g. tmdb.
+             */
+            provider: string;
+            /**
+             * Title
+             * @description The canonical name, in the provider's configured language.
+             */
+            title: string;
+            /**
+             * Url
+             * @description Its page on the provider's site.
+             */
+            url: string;
+            /**
+             * Year
+             * @description Release or first-air year, if known.
+             */
+            year: number | null;
+        };
+        /** TitleSearchView */
+        TitleSearchView: {
+            /**
+             * Age Seconds
+             * @description How long ago the provider gave this answer.
+             * @default 0
+             */
+            age_seconds: number;
+            /** @description Where the results come from; credit it wherever you show them. */
+            attribution: components["schemas"]["ProviderInfo"];
+            /** Results */
+            results: components["schemas"]["TitleMatch"][];
+            /**
+             * Stale
+             * @description The provider couldn't be asked just now, so this is an older answer.
+             * @default false
+             */
+            stale: boolean;
         };
     };
     responses: never;
@@ -1789,7 +2014,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The download backend failed or is unreachable */
+            /** @description An outside service (the download backend, a metadata provider) failed */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -2001,7 +2226,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The download backend failed or is unreachable */
+            /** @description An outside service (the download backend, a metadata provider) failed */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -2397,7 +2622,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The download backend failed or is unreachable */
+            /** @description An outside service (the download backend, a metadata provider) failed */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -2807,6 +3032,353 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthView"];
+                };
+            };
+        };
+    };
+    clearMetadataCache: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The key's role does not allow this action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    listMetadataProviders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetadataProviderView"][];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    getProviderKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A provider id from /metadata/providers, e.g. tmdb. */
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderKeyView"];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The key's role does not allow this action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    setProviderKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A provider id from /metadata/providers, e.g. tmdb. */
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetProviderKeyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderKeyView"];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The key's role does not allow this action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    clearProviderKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A provider id from /metadata/providers, e.g. tmdb. */
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderKeyView"];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The key's role does not allow this action */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    searchTitles: {
+        parameters: {
+            query: {
+                /** @description A title, in any language. */
+                q: string;
+                /** @description A provider id from /metadata/providers. */
+                provider?: string;
+                kind?: components["schemas"]["KindFilter"];
+                limit?: number;
+                /** @description Ask the provider again, even if Charon remembers an answer. */
+                refresh?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TitleSearchView"];
+                };
+            };
+            /** @description Missing, invalid or revoked API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflicts with the resource's current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many requests for now; see Retry-After */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description An outside service (the download backend, a metadata provider) failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };

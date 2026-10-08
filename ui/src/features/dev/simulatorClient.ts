@@ -19,6 +19,23 @@ export interface FakeFeed {
   items: { name: string; info_hash: string; magnet: string }[];
 }
 
+export type FakeTmdbMode = "ok" | "throttled" | "down";
+
+/** The fake TMDB: how it answers, the requests so far, and the most it saw in any window. */
+export interface FakeTmdbState {
+  mode: FakeTmdbMode;
+  requests: number;
+  busiest_window: number;
+  limit: number;
+  window_seconds: number;
+}
+
+const TMDB_CONTROLS: Record<FakeTmdbMode, string> = {
+  ok: "heal",
+  throttled: "throttle",
+  down: "down",
+};
+
 /** Steers the fake Download Station through its test-only `/_control` endpoints. */
 export interface SimulatorClient {
   listTasks(): Promise<FakeTask[]>;
@@ -30,6 +47,8 @@ export interface SimulatorClient {
   publish(slug: string): Promise<void>;
   breakFeed(slug: string, mode: Exclude<FakeFeedMode, "ok">): Promise<void>;
   healFeed(slug: string): Promise<void>;
+  tmdbState(): Promise<FakeTmdbState>;
+  setTmdbMode(mode: FakeTmdbMode): Promise<void>;
 }
 
 export function createHttpSimulator(
@@ -58,6 +77,8 @@ export function createHttpSimulator(
     publish: (slug) => post(`/feeds/${encodeURIComponent(slug)}/publish`),
     breakFeed: (slug, mode) => post(`/feeds/${encodeURIComponent(slug)}/break`, { mode }),
     healFeed: (slug) => post(`/feeds/${encodeURIComponent(slug)}/heal`),
+    tmdbState: async () => (await call("/tmdb")).json(),
+    setTmdbMode: (mode) => post(`/tmdb/${TMDB_CONTROLS[mode]}`),
   };
 }
 

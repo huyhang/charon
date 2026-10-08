@@ -3,7 +3,8 @@
 A small, API-first service for a Synology NAS. Send it a magnet link and it downloads the
 torrent through Download Station, tracks progress, then renames and moves the result
 according to your post-download rules. Subscribe it to RSS feeds of magnet links to see
-what's new at a glance, and which of it your rules would file.
+what's new at a glance, and which of it your rules would file. While writing a rule, look up
+a show's official title on TMDB and have the rule rename releases to it.
 
 It is meant to be reached only from your LAN or Tailscale.
 
@@ -52,6 +53,10 @@ when `CHARON_ADMIN_API_KEY` is set (see [API keys](#api-keys)). Paths below omit
 | `POST /feeds/items/seen` `{info_hashes}` | Mark exactly these items as seen |
 | `POST /feeds/items/seen-all` `{up_to, feed_id?, match?, q?}` | Mark everything in a view as seen, if first seen at or before `up_to` |
 | `GET /feeds/summary` | Unseen items, in total and per feed |
+| `GET /metadata/providers` | Where titles can be looked up (TMDB), whether each has a key (`configured`), and the attribution each requires |
+| `GET /metadata/search?q=&provider=tmdb&kind=any\|tv\|movie&limit=&refresh=` | Movies and shows matching `q`, under their canonical names, with `stale` and `age_seconds` when remembered (see [Title lookup](#title-lookup-tmdb)) |
+| `GET/PUT/DELETE /metadata/providers/{id}/key` `{key}` | A provider's key: where it comes from and its last characters / save one / forget it (admins, or anyone with auth off; the key is never returned) |
+| `DELETE /metadata/cache` | Forget remembered title searches (admins, or anyone with auth off) |
 | `GET /events?after=&limit=&type=` | What happened since a cursor (see [For scripts and agents](#for-scripts-and-agents)) |
 | `GET /destinations/roots` | The folders rule destinations must be inside |
 | `GET /destinations/folders?path=` | Folder names directly inside `path` (never files), for picking a destination |
@@ -171,6 +176,49 @@ Subscribe to RSS feeds whose items link to magnets (in `<link>`, an `<enclosure>
 - Items stay while a feed lists them, plus 30 days after. A paused or failing feed may still
   list them, so its items are kept as of its last successful read.
 
+### Title lookup (TMDB)
+
+Release names often use a show's original or romanized title: *Kusuriya no Hitorigoto* is
+*The Apothecary Diaries* on TMDB. While writing a rule, Charon can look the official title up
+and add a rename step for it. Lookups only happen while you edit a rule; downloads never
+wait on TMDB.
+
+- **Set up.** Lookups need your own TMDB **API Read Access Token**, free for non-commercial
+  use (themoviedb.org → Settings → API; the long token, not the short API Key). An admin saves
+  it under **Settings → Title lookup**, or right in the lookup dialog the first time; it
+  applies at once, without a restart. `CHARON_TMDB_TOKEN` can provide one instead, used while
+  none is saved in Charon. Without either, searches answer `409 metadata_not_configured`.
+  The token only ever travels in a header, so it never shows up in a URL or a log, and
+  Charon shows at most its last 4 characters back. `CHARON_TMDB_LANGUAGE` (a language code such
+  as `en-US`, `fr-FR` or `ja`; default `en-US`) picks the language titles come back in.
+- **Searching.** `GET /metadata/search?q=Kusuriya no Hitorigoto` answers with movies and shows
+  (TMDB's people are left out), best first, each with its `title`, `original_title`, `year`,
+  `kind` and TMDB page `url`. `kind=tv` or `kind=movie` narrows it.
+- **Remembered answers.** A search is answered from memory for a day (an empty one for an
+  hour), so repeating it costs nothing; searches that differ only in case or spacing share an
+  answer, and simultaneous searches for the same new title make one request between them.
+  After that, an answer is renewed only when the request budget has room right now; if it
+  hasn't, or TMDB fails, the older answer (up to a week old) comes back with `stale: true` and
+  its `age_seconds`, rather than an error. `refresh=true` asks TMDB again regardless, and
+  `DELETE /metadata/cache` forgets everything. Removing the last key forgets TMDB's answers too.
+- **Within TMDB's limits.** Charon never sends TMDB more than 40 requests in any 10 seconds,
+  however they are spread (the window is padded to 11 s, so network delays can't bunch more
+  than 40 into 10 s by the time they arrive). A search that would go over waits up to 2
+  seconds for room, then answers `429 metadata_rate_limited` with `Retry-After`. If TMDB
+  itself answers `429`, Charon holds back for as long as it says (at most a minute), or a
+  full window if it doesn't say.
+- **Credit.** TMDB's terms ask apps to credit it, so every answer carries `attribution` (who
+  to credit, with the notice TMDB requires), and the UI shows TMDB's logo with the results
+  and its notice under **About Charon**. If your script shows results to people, credit TMDB
+  too.
+- **Problems** come back as `metadata_unavailable` (TMDB unreachable or failing; retryable),
+  `metadata_auth_failed` (the token was refused), `metadata_not_configured` (no token),
+  `metadata_key_wrong_kind` (the short API Key was pasted) or `metadata_error`, each with a
+  hint.
+
+This product uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise
+approved by TMDB.
+
 ### For scripts and agents
 
 Charon is meant to be driven by scripts and, someday, an AI agent as well as by people:
@@ -231,8 +279,16 @@ sign in with an API key. Over HTTPS it also installs as an app (PWA); see
   and checks it against your rules before you subscribe. An unread badge sits on the nav.
 - **Rules:** drag to reorder priorities, toggle rules on and off, and edit them with a step
   builder, a folder browser limited to `CHARON_RULE_ROOTS`, and a test bench that runs your
-  unsaved draft on the server as you type.
+  unsaved draft on the server as you type. **Look up official title** searches TMDB for the
+  title in the sample name you gave (from a feed item, or typed into the test bench; a rule
+  started from scratch starts with an empty search), and picking a result adds a step that
+  renames it, written the release's way (`The.Apothecary.Diaries`), with the year if you
+  like (unless the release already names it). Characters that don't belong in file names
+  are replaced or dropped: `/` becomes `-`, `:` becomes ` - `, and `?`, `*`, `"`, `<`, `>`,
+  `|` go. Results remembered from earlier say how old they are, with **Ask again**.
 - **API keys** (admins): issue a key and see it once, revoke with a confirmation.
+- **Settings** (admins, or everyone with auth off): TMDB's token for title lookup (where it
+  comes from, replace or remove it) and clearing remembered searches.
 - ⌘K / Ctrl+K command palette, light and dark themes, phone layout.
 
 ### HTTPS over Tailscale
@@ -315,7 +371,18 @@ make ui-seed         # in another shell: sample rules, downloads in every state,
 visible, and accepts the same `CHARON_PORT` / `FAKE_DS_PORT` overrides as `make dev` (pass
 them to `make ui-seed` too). In dev builds a **Simulator** button steers the fake: finish or
 fail a task, expire sessions, reset, and publish to, break or heal its feeds (then Charon
-refreshes, so the inbox shows the change at once). It is compiled out of production builds.
+refreshes, so the inbox shows the change at once). It also makes the fake TMDB throttle
+(`429`) or fail (`503`), and shows the most requests it got in any 10 seconds. It is compiled
+out of production builds.
+
+`make dev` and `make ui-dev` point Charon at a fake TMDB too, so title lookup works without a
+TMDB account. To try it: open the *Kusuriya no Hitorigoto* item in the anime feed, choose
+**Create rule from this**, then **Look up official title**. The fake knows the sample feeds'
+titles (try *Frieren*, *Dandadan* or *Dune*) and lists a person for *Kusuriya*, whom Charon
+leaves out. The dev stack gives Charon the fake's token through `CHARON_TMDB_TOKEN`; save
+another in **Settings** to see TMDB refuse it, then remove it to fall back. Charon remembers
+answers, so search for a new title (or use **Ask again**) to reach the fake after breaking
+it: a remembered title then comes back marked stale.
 
 `make ui-seed` subscribes Charon to the fake's two feeds (`/feeds/tv.xml`, `/feeds/anime.xml`),
 whose items cover every case: each sample rule, no rule, no date, a `.torrent` link that is
@@ -385,12 +452,15 @@ Test-only control endpoints:
 | `POST /_control/tasks/{id}/complete` | Finish a task now |
 | `POST /_control/tasks/{id}/fail` `{detail}` | Fail a task |
 | `POST /_control/sessions/expire` | Invalidate sessions (tests re-login) |
-| `POST /_control/reset` | Clear all tasks and sessions, and restore the sample feeds |
+| `POST /_control/reset` | Clear all tasks and sessions, and restore the sample feeds and fake TMDB |
 | `GET /feeds/{tv,anime}.xml` | Sample RSS feeds of magnet links, dated relative to when the fake started (honours `If-None-Match`) |
 | `GET /_control/feeds` | List the fake feeds and their items |
 | `POST /_control/feeds/{slug}/publish` `{name?}` | Add an item dated now |
 | `POST /_control/feeds/{slug}/break` `{mode}` | Make the feed answer `503` (`http_error`) or HTML (`bad_xml`) |
 | `POST /_control/feeds/{slug}/heal` | Serve the feed normally again |
+| `GET /tmdb/3/search/multi?query=` | A fake TMDB multi search (bearer token `dev-tmdb-token`, or `FAKE_TMDB_TOKEN`): movies, shows and a person, in TMDB's shapes. Answers `429` past 40 requests in 10 s |
+| `GET /_control/tmdb` | The fake TMDB's mode, requests so far, and the most in any 10 s (`busiest_window`) |
+| `POST /_control/tmdb/{throttle,down,heal}` | Make it answer `429` or `503`, or normally again |
 
 Three ways to stand it up:
 
@@ -416,11 +486,14 @@ Generated and test-only code is left out: the OpenAPI types (`schema.d.ts`), tes
 ```
 charon/
   domain/     models and pure rename/match logic
-  ports/      interfaces: Downloader, FeedFetcher, EventLog, stores, FileOps, Clock
+  ports/      interfaces: Downloader, FeedFetcher, MetadataProvider, TitleLookup, EventLog,
+              stores (incl. SettingsStore), FileOps, Clock
   services/   DownloadService, RuleService, ApiKeyService, DestinationService, PostProcessor,
               Watcher, FeedService, FeedInbox, FeedRefresher, AutoDownloader, EventService,
-              IdempotencyService, Housekeeper
-  adapters/   download_station/, sqlite/ (with migrations.py), http_feed_fetcher.py, local_fs.py
+              IdempotencyService, Housekeeper, MetadataService, ProviderKeys, metadata_layers
+              (CachedProvider, RateLimitedProvider), SlidingWindowLimiter, SingleFlight
+  adapters/   download_station/, sqlite/ (with migrations.py), tmdb/, http_feed_fetcher.py,
+              local_fs.py
   api/        FastAPI routers, schemas, auth, error mapping
   bootstrap.py  composition root: the only module that knows concrete adapters
 fake_ds/      fake Download Station, plus `python -m fake_ds.seed` for sample data
@@ -448,6 +521,19 @@ missing when Charon starts.
 2. Register a factory in `DOWNLOADERS` in `charon/bootstrap.py` and extend the `downloader`
    literal and settings in `charon/config.py`.
 3. Set `CHARON_DOWNLOADER=transmission`. Nothing else changes.
+
+### Adding another metadata provider
+
+1. Implement `charon.ports.metadata.MetadataProvider` (`search`) in `charon/adapters/<name>/`,
+   mapping its answers onto `TitleMatch`, with a `ProviderInfo` that says how to credit it.
+   Read its key through a callable on every request, as `TmdbProvider` does, so a key saved
+   while Charon runs is used at once.
+2. In `charon/bootstrap.py`, add a factory to `METADATA_PROVIDERS` that wraps it like
+   `build_tmdb` does: its own `SlidingWindowLimiter` for its own limits, behind a
+   `CachedProvider`. Add its key's environment default to `metadata_key_defaults` and, if some
+   keys can't be right, a check to `METADATA_KEY_CHECKS`.
+3. It then appears in `GET /metadata/providers` and in **Settings**. The UI shows its name
+   until you add its logo and key wording (`ProviderCredit.tsx`, `ProviderKeyForm.tsx`).
 
 ## Configuration
 

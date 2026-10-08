@@ -5,7 +5,7 @@ import {
   Loader2Icon,
   TriangleAlertIcon,
 } from "lucide-react";
-import { useId, useState } from "react";
+import { useId } from "react";
 import { errorMessage } from "@/api/errors";
 import { allJobs, useDownloads, usePreview } from "@/api/queries";
 import type { RuleSpec } from "@/api/types";
@@ -15,7 +15,7 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { isPreviewable } from "@/lib/rules";
 
 /** Recent download names, offered as realistic samples. */
-function useSampleNames(): string[] {
+export function useSampleNames(): string[] {
   const downloads = useDownloads("all");
   const names = allJobs(downloads.data).flatMap((job) => (job.name ? [job.name] : []));
   return [...new Set(names)].slice(0, 10);
@@ -69,12 +69,23 @@ function Result({ spec, name }: { spec: RuleSpec; name: string }) {
   );
 }
 
+/** The name to try a rule on: the one typed, or else the most recent download's. */
+export function sampleName(typed: string, samples: readonly string[]): string {
+  return typed || samples[0] || "";
+}
+
+interface TestBenchProps {
+  spec: RuleSpec;
+  /** The sample name typed so far; blank tries the most recent download's. */
+  name: string;
+  onNameChange(name: string): void;
+}
+
 /** Runs the unsaved draft on the server against a sample name, as you type. */
-export function TestBench({ spec, initialName = "" }: { spec: RuleSpec; initialName?: string }) {
+export function TestBench({ spec, name, onNameChange }: TestBenchProps) {
   const samples = useSampleNames();
-  const [name, setName] = useState(initialName);
   const listId = useId();
-  const sample = name || samples[0] || "";
+  const sample = sampleName(name, samples);
 
   return (
     <div className="space-y-3 rounded-xl border border-primary/20 bg-primary/[0.03] p-4">
@@ -86,7 +97,7 @@ export function TestBench({ spec, initialName = "" }: { spec: RuleSpec; initialN
         list={listId}
         value={name}
         placeholder={samples[0] ?? "Some.Show.S01E01.1080p.mkv"}
-        onChange={(event) => setName(event.target.value)}
+        onChange={(event) => onNameChange(event.target.value)}
         spellCheck={false}
         className="font-mono text-xs"
       />

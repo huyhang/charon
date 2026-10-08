@@ -257,6 +257,45 @@ describe("createHttpClient requests", () => {
           body: undefined,
         },
       ],
+      [
+        "metadataProviders",
+        (api) => api.metadataProviders(),
+        { method: "GET", url: "/api/v1/metadata/providers", body: undefined },
+      ],
+      [
+        "searchTitles",
+        (api) => api.searchTitles({ q: "Kusuriya no", provider: "tmdb", kind: "tv" }),
+        {
+          method: "GET",
+          url: "/api/v1/metadata/search?q=Kusuriya%20no&provider=tmdb&kind=tv",
+          body: undefined,
+        },
+      ],
+      [
+        "searchTitles, asking again",
+        (api) => api.searchTitles({ q: "dune", refresh: true }),
+        { method: "GET", url: "/api/v1/metadata/search?q=dune&refresh=true", body: undefined },
+      ],
+      [
+        "providerKey",
+        (api) => api.providerKey("tmdb"),
+        { method: "GET", url: "/api/v1/metadata/providers/tmdb/key", body: undefined },
+      ],
+      [
+        "saveProviderKey",
+        (api) => api.saveProviderKey("tmdb", "eyJ.token"),
+        { method: "PUT", url: "/api/v1/metadata/providers/tmdb/key", body: { key: "eyJ.token" } },
+      ],
+      [
+        "removeProviderKey",
+        (api) => api.removeProviderKey("tmdb"),
+        { method: "DELETE", url: "/api/v1/metadata/providers/tmdb/key", body: undefined },
+      ],
+      [
+        "clearTitleCache",
+        (api) => api.clearTitleCache(),
+        { method: "DELETE", url: "/api/v1/metadata/cache", body: undefined },
+      ],
     ],
   )("%s", async (_, call, expected) => {
     const { api, calls } = client();
@@ -321,9 +360,10 @@ describe("createHttpClient responses", () => {
     expect([error.hint, error.retryable]).toEqual(["Check it", true]);
   });
 
-  it("resolves deleteRule on 204", async () => {
+  it.each(["deleteRule", "clearTitleCache"] as const)("resolves %s on 204", async (method) => {
     const { api } = client("k", 204);
-    await expect(api.deleteRule("r1")).resolves.toBeUndefined();
+    const calls = { deleteRule: () => api.deleteRule("r1"), clearTitleCache: api.clearTitleCache };
+    await expect(calls[method]()).resolves.toBeUndefined();
   });
 
   it("sends no key header when signed out", async () => {

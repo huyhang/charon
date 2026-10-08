@@ -1,4 +1,5 @@
 import logging
+import math
 from http import HTTPStatus
 
 from fastapi import FastAPI, Request
@@ -13,7 +14,9 @@ from charon.errors import (
     DownloaderError,
     ForbiddenError,
     InvalidInputError,
+    MetadataError,
     NotFoundError,
+    RateLimitedError,
     UnauthorizedError,
 )
 from charon.hints import hint_for, is_retryable
@@ -26,7 +29,9 @@ _STATUS_CODES: list[tuple[type[CharonError], int]] = [
     (NotFoundError, 404),
     (ConflictError, 409),
     (InvalidInputError, 422),
+    (RateLimitedError, 429),
     (DownloaderError, 502),
+    (MetadataError, 502),
 ]
 
 
@@ -42,7 +47,14 @@ def error_body(code: str, message: str, **extra: object) -> dict[str, object]:
 async def _charon_error(_: Request, exc: CharonError) -> JSONResponse:
     extra = {"details": exc.details} if exc.details is not None else {}
     body = error_body(exc.code, exc.message, **extra)
-    return JSONResponse(body, status_code=status_code_for(exc))
+    return JSONResponse(body, status_code=status_code_for(exc), headers=_retry_after(exc))
+
+
+def _retry_after(exc: CharonError) -> dict[str, str] | None:
+    """The standard Retry-After header, for clients that understand it."""
+    if isinstance(exc, RateLimitedError) and exc.retry_after is not None:
+        return {"Retry-After": str(max(1, math.ceil(exc.retry_after)))}
+    return None
 
 
 async def _unexpected_error(request: Request, exc: Exception) -> JSONResponse:

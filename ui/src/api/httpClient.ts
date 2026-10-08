@@ -39,6 +39,8 @@ export function authMiddleware(getKey: () => string | null): Middleware {
   };
 }
 
+const PROVIDER_KEY = "/api/v1/metadata/providers/{provider_id}/key";
+
 export function createHttpClient({ baseUrl = "", getKey, fetch }: HttpClientOptions): CharonClient {
   const api = createClient<paths>({ baseUrl, fetch: fetch && ((req) => fetch(req)) });
   api.use(authMiddleware(getKey));
@@ -140,5 +142,27 @@ export function createHttpClient({ baseUrl = "", getKey, fetch }: HttpClientOpti
     destinationRoots: async () => unwrap(await api.GET("/api/v1/destinations/roots")).roots,
     destinationFolders: async (path) =>
       unwrap(await api.GET("/api/v1/destinations/folders", { params: { query: { path } } })),
+
+    metadataProviders: async () => unwrap(await api.GET("/api/v1/metadata/providers")),
+    searchTitles: async ({ q, provider, kind, refresh }) =>
+      unwrap(
+        await api.GET("/api/v1/metadata/search", {
+          params: { query: { q, provider, kind, refresh } },
+        }),
+      ),
+    providerKey: async (providerId) =>
+      unwrap(await api.GET(PROVIDER_KEY, { params: { path: { provider_id: providerId } } })),
+    saveProviderKey: async (providerId, key) =>
+      unwrap(
+        await api.PUT(PROVIDER_KEY, {
+          params: { path: { provider_id: providerId } },
+          body: { key },
+        }),
+      ),
+    removeProviderKey: async (providerId) =>
+      unwrap(await api.DELETE(PROVIDER_KEY, { params: { path: { provider_id: providerId } } })),
+    clearTitleCache: async () => {
+      unwrap(await api.DELETE("/api/v1/metadata/cache"));
+    },
   };
 }

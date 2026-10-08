@@ -39,9 +39,9 @@ function pasteOnPage(text: string) {
 
 describe("AppShell", () => {
   it.each<[string, Principal, string[]]>([
-    ["admin", ADMIN, ["Downloads", "Feeds", "Rules", "API keys"]],
+    ["admin", ADMIN, ["Downloads", "Feeds", "Rules", "API keys", "Settings"]],
     ["client", CLIENT, ["Downloads", "Feeds", "Rules"]],
-    ["auth disabled", ANONYMOUS, ["Downloads", "Feeds", "Rules"]],
+    ["auth disabled", ANONYMOUS, ["Downloads", "Feeds", "Rules", "Settings"]],
   ])("%s sees these pages in both navigations", async (_label, principal, expected) => {
     await renderShell("/downloads", principal);
     expect(links("Main")).toEqual(expected);

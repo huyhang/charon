@@ -4,7 +4,9 @@ from pathlib import Path, PurePosixPath
 
 from fastapi.testclient import TestClient
 
+from charon.adapters.tmdb.mapping import TMDB
 from charon.api.app import create_app
+from charon.bootstrap import METADATA_KEY_CHECKS
 from charon.container import Container
 from charon.domain.destinations import DestinationPolicy
 from charon.services.api_key_service import ApiKeyService
@@ -17,7 +19,9 @@ from charon.services.feed_refresher import FeedRefresher
 from charon.services.feed_service import FeedService
 from charon.services.housekeeper import Housekeeper
 from charon.services.idempotency_service import IdempotencyService
+from charon.services.metadata_service import MetadataService, MetadataSource
 from charon.services.post_processor import PostProcessor
+from charon.services.provider_keys import ProviderKeys
 from charon.services.rule_service import RuleService
 from charon.services.watcher import Watcher
 from tests.unit.fakes import (
@@ -26,6 +30,7 @@ from tests.unit.fakes import (
     FakeDownloader,
     FakeFeedFetcher,
     FakeFileOps,
+    FakeTitleProvider,
     InMemoryApiKeyStore,
     InMemoryEventStore,
     InMemoryFeedItemStore,
@@ -33,6 +38,7 @@ from tests.unit.fakes import (
     InMemoryIdempotencyStore,
     InMemoryJobStore,
     InMemoryRuleStore,
+    InMemorySettingsStore,
     SequentialIds,
 )
 
@@ -45,6 +51,7 @@ class Harness:
         ui_dir: Path | None = None,
         policy: DestinationPolicy = ALLOW_ALL,
         roots: tuple[str, ...] = ("/",),
+        tmdb_key: str | None = "harness-tmdb-token-0001",
     ) -> None:
         self.jobs = InMemoryJobStore()
         self.downloader = FakeDownloader()
@@ -85,6 +92,10 @@ class Harness:
             SequentialIds("feed"),
             clock,
         )
+        self.titles = FakeTitleProvider()
+        # TMDB has a key from the environment unless a test takes it away (tmdb_key=None).
+        self.settings = InMemorySettingsStore()
+        self.metadata_keys = ProviderKeys(self.settings, {TMDB.id: tmdb_key}, METADATA_KEY_CHECKS)
         container = Container(
             download_service=downloads,
             rule_service=rules,
@@ -97,6 +108,9 @@ class Harness:
             housekeeper=Housekeeper(self.events, idempotency, inbox),
             downloader=self.downloader,
             watcher=self.watcher,
+            metadata_service=MetadataService(
+                [MetadataSource(TMDB, self.titles)], self.metadata_keys
+            ),
             cors_origins=cors_origins or [],
             ui_dir=ui_dir,
         )

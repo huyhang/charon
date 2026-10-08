@@ -10,6 +10,7 @@ from charon.adapters.sqlite.idempotency_store import SqliteIdempotencyStore
 from charon.adapters.sqlite.job_store import SqliteJobStore
 from charon.adapters.sqlite.migrations import MIGRATIONS
 from charon.adapters.sqlite.rule_store import SqliteRuleStore
+from charon.adapters.sqlite.settings_store import SqliteSettingsStore
 from charon.domain.events import Event, EventType
 from charon.domain.models import SYSTEM, ApiKey, IdempotencyRecord, JobStatus, Role
 from tests.unit.fakes import T0, InMemoryEventStore, make_job, make_rule
@@ -282,3 +283,15 @@ def test_api_key_hash_is_unique(db) -> None:
     store.add(key)
     with pytest.raises(sqlite3.IntegrityError):
         store.add(key.model_copy(update={"id": "k2"}))
+
+
+@pytest.mark.parametrize(("first", "second"), [("one", "two"), ("same", "same")])
+def test_settings_store_sets_overwrites_and_deletes(db, first: str, second: str) -> None:
+    store = SqliteSettingsStore(db)
+    assert store.get("metadata.tmdb.api_key") is None
+    store.set("metadata.tmdb.api_key", first)
+    store.set("metadata.tmdb.api_key", second)
+    assert store.get("metadata.tmdb.api_key") == second
+    assert store.delete("metadata.tmdb.api_key") is True
+    assert store.delete("metadata.tmdb.api_key") is False
+    assert store.get("metadata.tmdb.api_key") is None

@@ -3,7 +3,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { errorMessage, isApiError } from "@/api/errors";
 import { useDeleteRule, useSaveRule } from "@/api/queries";
-import type { Rule, RuleSpec } from "@/api/types";
+import type { RenameStep, Rule, RuleSpec, TitleMatch } from "@/api/types";
 import { ConfirmDialog } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,10 +21,12 @@ import { Switch } from "@/components/ui/switch";
 import { fieldErrors } from "@/lib/fieldErrors";
 import { clearStaleErrors, draftProblems, fieldForCode } from "@/lib/ruleDraft";
 import { toSpec } from "@/lib/rules";
+import { queryFromName, withTitle } from "@/lib/titles";
 import { DestinationPicker } from "./DestinationPicker";
 import { errorProps, FormField } from "./FormField";
 import { StepBuilder } from "./StepBuilder";
 import { TestBench } from "./TestBench";
+import { TitleLookup } from "./TitleLookup";
 
 export type EditorTarget =
   /** `sample` is a download name to try the new rule on, e.g. from a feed item. */
@@ -75,6 +77,9 @@ function EditorForm({ target, onDone }: { target: EditorTarget; onDone(): void }
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [typedSample, setTypedSample] = useState(
+    target.mode === "create" ? (target.sample ?? "") : "",
+  );
   const save = useSaveRule();
   const remove = useDeleteRule();
   const problems = draftProblems(spec);
@@ -82,6 +87,14 @@ function EditorForm({ target, onDone }: { target: EditorTarget; onDone(): void }
   const update = (patch: Partial<RuleSpec>) => {
     setSpec((prev) => ({ ...prev, ...patch }));
     setErrors((prev) => clearStaleErrors(prev, Object.keys(patch)));
+  };
+
+  // Title lookup starts from a name you gave (or the feed item's), never the test bench's
+  // fallback to the newest download, which may have nothing to do with this rule.
+  const onTitle = (step: RenameStep, match: TitleMatch) => {
+    const next = withTitle(spec, step, match.title, queryFromName(typedSample));
+    update({ name: next.name, steps: next.steps });
+    toast.success("Added a rename step", { description: `${step.find} → ${step.replace}` });
   };
 
   const onSubmit = (event: FormEvent) => {
@@ -189,6 +202,7 @@ function EditorForm({ target, onDone }: { target: EditorTarget; onDone(): void }
             spec={spec}
             onChange={(next) => update({ steps: next.steps })}
             errors={errors}
+            actions={<TitleLookup sample={typedSample} onPick={onTitle} />}
           />
         </Section>
 
@@ -201,7 +215,7 @@ function EditorForm({ target, onDone }: { target: EditorTarget; onDone(): void }
           />
         </Section>
 
-        <TestBench spec={spec} initialName={target.mode === "create" ? target.sample : undefined} />
+        <TestBench spec={spec} name={typedSample} onNameChange={setTypedSample} />
 
         {errors._ && (
           <p

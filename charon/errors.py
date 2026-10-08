@@ -37,3 +37,16 @@ class ForbiddenError(CharonError):
 
 class FeedError(InvalidInputError):
     """A feed couldn't be fetched or read. Its message never contains the feed's URL."""
+
+
+class MetadataError(CharonError):
+    """A metadata provider (e.g. TMDB) failed or answered unexpectedly."""
+
+
+class RateLimitedError(CharonError):
+    """Too many requests for now. `retry_after` is how many seconds to wait, if known."""
+
+    def __init__(self, code: str, message: str, retry_after: float | None = None) -> None:
+        details = None if retry_after is None else {"retry_after_seconds": round(retry_after, 1)}
+        super().__init__(code, message, details)
+        self.retry_after = retry_after

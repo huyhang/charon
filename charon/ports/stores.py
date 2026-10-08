@@ -94,6 +94,18 @@ class EventStore(Protocol):
         ...
 
 
+class SettingsStore(Protocol):
+    """Small named settings changed while Charon runs, e.g. a metadata provider's API key."""
+
+    def get(self, name: str) -> str | None: ...
+
+    def set(self, name: str, value: str) -> None: ...
+
+    def delete(self, name: str) -> bool:
+        """Forget the setting; False if it wasn't set."""
+        ...
+
+
 class IdempotencyStore(Protocol):
     def get(self, scope: str, key: str) -> IdempotencyRecord | None: ...
 

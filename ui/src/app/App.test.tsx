@@ -85,6 +85,9 @@ describe("App", () => {
     ["/keys", ADMIN, "API keys", "/keys"],
     ["/keys", CLIENT, "Downloads", "/downloads"],
     ["/keys", ANONYMOUS, "Downloads", "/downloads"],
+    ["/settings", ADMIN, "Settings", "/settings"],
+    ["/settings", ANONYMOUS, "Settings", "/settings"],
+    ["/settings", CLIENT, "Downloads", "/downloads"],
   ])("%s as %j shows %s at %s", async (url, principal, heading, landed) => {
     renderApp({ url, client: createFakeClient({ me: async () => principal }) });
     expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();

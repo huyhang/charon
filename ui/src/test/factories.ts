@@ -1,4 +1,13 @@
-import type { ApiKey, Feed, FeedItem, Job, Principal, Rule } from "@/api/types";
+import type {
+  ApiKey,
+  Feed,
+  FeedItem,
+  Job,
+  MetadataProvider,
+  Principal,
+  Rule,
+  TitleMatch,
+} from "@/api/types";
 
 const T0 = "2026-10-04T12:00:00Z";
 
@@ -115,3 +124,34 @@ export const CLIENT: Principal = {
   key_id: "key-1",
   auth_enabled: true,
 };
+
+export const TMDB: MetadataProvider = {
+  id: "tmdb",
+  name: "TMDB",
+  url: "https://www.themoviedb.org",
+  notice:
+    "This product uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.",
+  configured: true,
+};
+
+/** Signed in with auth off: everyone is an admin, and there are no API keys. */
+export const ANONYMOUS_ADMIN: Principal = {
+  name: "anonymous",
+  role: "admin",
+  key_id: null,
+  auth_enabled: false,
+};
+
+export function makeTitle(overrides: Partial<TitleMatch> = {}): TitleMatch {
+  return {
+    provider: "tmdb",
+    id: "220542",
+    kind: "tv",
+    title: "The Apothecary Diaries",
+    original_title: "薬屋のひとりごと",
+    year: 2023,
+    overview: "Maomao is sold into service at the imperial palace.",
+    url: "https://www.themoviedb.org/tv/220542",
+    ...overrides,
+  };
+}

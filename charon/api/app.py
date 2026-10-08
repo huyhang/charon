@@ -8,7 +8,17 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
 
-from charon.api import api_keys, auth, destinations, downloads, events, feeds, health, rules
+from charon.api import (
+    api_keys,
+    auth,
+    destinations,
+    downloads,
+    events,
+    feeds,
+    health,
+    metadata,
+    rules,
+)
 from charon.api.deps import authenticate
 from charon.api.errors import register_error_handlers
 from charon.api.ui import SpaStaticFiles
@@ -42,6 +52,7 @@ def create_api(lifespan: Lifespan | None = None) -> FastAPI:
     app.include_router(destinations.router, prefix=API_PREFIX, dependencies=authenticated)
     app.include_router(events.router, prefix=API_PREFIX, dependencies=authenticated)
     app.include_router(feeds.router, prefix=API_PREFIX, dependencies=authenticated)
+    app.include_router(metadata.router, prefix=API_PREFIX, dependencies=authenticated)
     app.include_router(api_keys.router, prefix=API_PREFIX)
     register_error_handlers(app)
     return app

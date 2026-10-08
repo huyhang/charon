@@ -23,6 +23,7 @@ from charon.config import Settings
 from fake_ds.app import create_app as create_fake_app
 from fake_ds.simulator import Simulator
 from fake_ds.station import FakeStation
+from fake_ds.tmdb import DEV_TOKEN
 
 API_KEY = "e2e-key"
 API_PREFIX = "/api/v1"
@@ -78,6 +79,8 @@ def _in_process_stack(root: Path) -> Iterator[Stack]:
         ds_url=fake_url,
         ds_username="admin",
         ds_password="admin",
+        tmdb_url=f"{fake_url}/tmdb",
+        tmdb_token=DEV_TOKEN,
     )
     charon_url = _serve(build_app(settings))
     with (

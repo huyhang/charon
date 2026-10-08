@@ -70,6 +70,18 @@ export function createFakeClient(overrides: Partial<CharonClient> = {}): FakeCli
     },
     destinationRoots: async () => ["/library"],
     destinationFolders: async (path) => ({ path, parent: null, folders: [] }),
+    metadataProviders: async () => [],
+    searchTitles: async () => {
+      throw new Error("searchTitles not stubbed");
+    },
+    providerKey: async (provider) => ({ provider, configured: false, source: null, hint: null }),
+    saveProviderKey: async () => {
+      throw new Error("saveProviderKey not stubbed");
+    },
+    removeProviderKey: async () => {
+      throw new Error("removeProviderKey not stubbed");
+    },
+    clearTitleCache: async () => {},
   };
   const merged = { ...defaults, ...overrides };
   return Object.fromEntries(

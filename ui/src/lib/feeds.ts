@@ -152,19 +152,37 @@ function titleLength(words: readonly string[]): number {
   return Math.min(words.length, MAX_TITLE_WORDS);
 }
 
+interface ReleaseTitle {
+  /** Whether the name starts with a [Group] tag. */
+  grouped: boolean;
+  /** The name after the tag: words at even indexes, the separators between them at odd ones. */
+  parts: string[];
+  words: string[];
+  /** How many leading words make the title. */
+  length: number;
+}
+
+function releaseTitle(name: string): ReleaseTitle {
+  const rest = name.replace(/^\[[^\]]*\]\s*/, "").replace(/^[.\s_]+/, "");
+  const parts = rest.split(/([.\s_]+)/);
+  const words = parts.filter((part, i) => i % 2 === 0 && part !== "");
+  return { grouped: name.startsWith("["), parts, words, length: titleLength(words) };
+}
+
 /**
  * A starting point for a rule that files releases like `name`: its title, and a glob that
  * matches other releases of the same title. The glob keeps the separator after the title, so
  * "The.100.*" doesn't also match "The.1000..." or "Theater...".
  */
 export function suggestRule(name: string): { name: string; pattern: string } {
-  const grouped = name.startsWith("[");
-  const rest = name.replace(/^\[[^\]]*\]\s*/, "").replace(/^[.\s_]+/, "");
-  // Words at even indexes, the separators between them at odd ones.
-  const parts = rest.split(/([.\s_]+)/);
-  const words = parts.filter((part, i) => i % 2 === 0 && part !== "");
-  const length = titleLength(words);
+  const { grouped, parts, words, length } = releaseTitle(name);
   const prefix = parts.slice(0, 2 * length).join("");
   const glob = prefix.replace(GLOB_SPECIAL, (c) => `[${c}]`);
   return { name: words.slice(0, length).join(" "), pattern: `${grouped ? "*" : ""}${glob}*` };
+}
+
+/** The title as the release spells it, separators and all: "Kusuriya.no.Hitorigoto". */
+export function titleInName(name: string): string {
+  const { parts, length } = releaseTitle(name);
+  return parts.slice(0, Math.max(0, 2 * length - 1)).join("");
 }

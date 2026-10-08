@@ -96,6 +96,30 @@ HINTS: dict[str, str] = {
     "feed_no_magnets": (
         "The feed has items, but none link to a magnet. Look for the site's magnet RSS option."
     ),
+    # Title lookup.
+    "invalid_query": "Search for a title of at least 2 characters.",
+    "metadata_provider_not_found": "List the providers Charon knows with GET /metadata/providers.",
+    "metadata_not_configured": (
+        "Title lookup needs a TMDB token. An admin can add one in Settings, "
+        "or set CHARON_TMDB_TOKEN."
+    ),
+    "invalid_metadata_key": "Paste the whole key the provider gave you, with nothing around it.",
+    "metadata_key_wrong_kind": (
+        "On themoviedb.org (Settings → API), copy the API Read Access Token: the long one, "
+        "not the short API Key."
+    ),
+    "metadata_rate_limited": (
+        "Charon is holding back to stay within TMDB's request limit. "
+        "Wait a little (see Retry-After), then search again."
+    ),
+    "metadata_unavailable": (
+        "Charon couldn't get an answer from TMDB. Check the NAS can reach it, then try again."
+    ),
+    "metadata_auth_failed": (
+        "TMDB didn't accept Charon's token. An admin can check it in Settings: it must be the "
+        "API Read Access Token, not the short API Key."
+    ),
+    "metadata_error": "TMDB answered in a way Charon didn't expect. Try again in a moment.",
 }
 
 # Sending the same request again later may work without changing anything.
@@ -109,6 +133,9 @@ RETRYABLE = frozenset(
         "feed_unreachable",
         "feed_http_error",
         "feed_unreadable",
+        "metadata_rate_limited",
+        "metadata_unavailable",
+        "metadata_error",
     }
 )
 

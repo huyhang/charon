@@ -1,12 +1,19 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { ApiError } from "@/api/errors";
 import type { Preview, PreviewRequest, RuleSpec } from "@/api/types";
 import { emptySpec } from "@/lib/rules";
 import { createFakeClient } from "@/test/fakeClient";
 import { makeJob } from "@/test/factories";
 import { renderWithApp } from "@/test/render";
-import { TestBench } from "./TestBench";
+import { sampleName, TestBench } from "./TestBench";
+
+/** The bench as the rule editor uses it, holding the typed name. */
+function Bench({ spec }: { spec: RuleSpec }) {
+  const [name, setName] = useState("");
+  return <TestBench spec={spec} name={name} onNameChange={setName} />;
+}
 
 const READY: RuleSpec = { ...emptySpec(10), name: "TV", pattern: "*S0?E*", destination: "/tv" };
 const invalidRegex = new ApiError(422, {
@@ -30,7 +37,7 @@ describe("TestBench", () => {
     ["no sample name or downloads", READY, "Type a sample name to see what happens."],
   ])("asks for more with %s", async (_label, spec, prompt) => {
     const client = createFakeClient();
-    await renderWithApp(<TestBench spec={spec} />, { client });
+    await renderWithApp(<Bench spec={spec} />, { client });
     expect(await screen.findByText(prompt)).toBeInTheDocument();
     expect(client.previewRule).not.toHaveBeenCalled();
   });
@@ -53,7 +60,7 @@ describe("TestBench", () => {
     ],
   ])("shows %s", async (_label, previewRule, expected) => {
     const client = createFakeClient({ previewRule });
-    await renderWithApp(<TestBench spec={READY} />, { client });
+    await renderWithApp(<Bench spec={READY} />, { client });
     await userEvent.type(screen.getByLabelText("Sample name"), "Show.S01E01.1080p.mkv");
     expect(await screen.findByText(expected)).toBeInTheDocument();
     expect(client.previewRule).toHaveBeenLastCalledWith({
@@ -74,7 +81,7 @@ describe("TestBench", () => {
         next_cursor: null,
       }),
     });
-    const { container } = await renderWithApp(<TestBench spec={READY} />, { client });
+    const { container } = await renderWithApp(<Bench spec={READY} />, { client });
     await waitFor(() =>
       expect(screen.getByLabelText("Sample name")).toHaveAttribute(
         "placeholder",
@@ -88,5 +95,15 @@ describe("TestBench", () => {
     await waitFor(() =>
       expect(client.previewRule).toHaveBeenCalledWith({ name: "Newest.S01E02.mkv", rule: READY }),
     );
+  });
+});
+
+describe("sampleName", () => {
+  it.each<[string, string[], string]>([
+    ["Typed.mkv", ["Recent.mkv"], "Typed.mkv"],
+    ["", ["Recent.mkv", "Older.mkv"], "Recent.mkv"],
+    ["", [], ""],
+  ])("picks %j over recent %j", (typed, samples, expected) => {
+    expect(sampleName(typed, samples)).toBe(expected);
   });
 });

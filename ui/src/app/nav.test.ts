@@ -1,22 +1,17 @@
 import type { Principal } from "@/api/types";
-import { ADMIN, CLIENT } from "@/test/factories";
-import { badgeLabel, canManageKeys, navItemsFor } from "./nav";
-
-const ANONYMOUS: Principal = {
-  name: "anonymous",
-  role: "admin",
-  key_id: null,
-  auth_enabled: false,
-};
+import { ADMIN, ANONYMOUS_ADMIN, CLIENT } from "@/test/factories";
+import { canChangeSettings, canManageKeys } from "@/auth/permissions";
+import { badgeLabel, navItemsFor } from "./nav";
 
 describe("navItemsFor", () => {
-  it.each<[string, Principal, string[], boolean]>([
-    ["admin", ADMIN, ["Downloads", "Feeds", "Rules", "API keys"], true],
-    ["client", CLIENT, ["Downloads", "Feeds", "Rules"], false],
-    ["auth disabled", ANONYMOUS, ["Downloads", "Feeds", "Rules"], false],
-  ])("%s", (_, principal, labels, manage) => {
+  it.each<[string, Principal, string[], boolean, boolean]>([
+    ["admin", ADMIN, ["Downloads", "Feeds", "Rules", "API keys", "Settings"], true, true],
+    ["client", CLIENT, ["Downloads", "Feeds", "Rules"], false, false],
+    ["auth disabled", ANONYMOUS_ADMIN, ["Downloads", "Feeds", "Rules", "Settings"], false, true],
+  ])("%s", (_, principal, labels, manageKeys, changeSettings) => {
     expect(navItemsFor(principal).map((item) => item.label)).toEqual(labels);
-    expect(canManageKeys(principal)).toBe(manage);
+    expect(canManageKeys(principal)).toBe(manageKeys);
+    expect(canChangeSettings(principal)).toBe(changeSettings);
   });
 });
 
